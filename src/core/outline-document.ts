@@ -1,5 +1,5 @@
 import { node, nodeType } from 'mobx-bonsai'
-import type { OutlineDocument, OutlineItem, DeletedItem } from './types'
+import type { OutlineDocument, DeletedItem } from './types'
 import { createItem } from './outline-item'
 import { findItemById, findParentOf, getVisibleItemIds } from './tree-helpers'
 
