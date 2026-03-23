@@ -1,6 +1,8 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { observer } from 'mobx-react-lite'
+import { onSnapshot, getSnapshot, applySnapshot } from 'mobx-bonsai'
 import { createUndoableDocument } from '../undo/undo-manager'
+import { saveDocument, loadDocument } from '../persistence/persistence'
 import { TOutlineDocument } from '../core/outline-document'
 import { TOutlineItem } from '../core/outline-item'
 import { findItemById } from '../core/tree-helpers'
@@ -12,6 +14,27 @@ export const App = observer(function App() {
     const [{ doc, undoManager }] = useState(() => createUndoableDocument('My First List'))
     const [keyboard] = useState(() => new KeyboardManager())
     const [toastMessage, setToastMessage] = useState<string | null>(null)
+    const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+    // Load saved state on mount
+    useEffect(() => {
+        loadDocument(doc.id).then((saved) => {
+            if (saved) {
+                applySnapshot(doc, saved)
+            }
+        })
+    }, [doc])
+
+    // Auto-save debounced on every change
+    useEffect(() => {
+        const dispose = onSnapshot(doc, () => {
+            if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+            saveTimerRef.current = setTimeout(() => {
+                saveDocument(doc.id, getSnapshot(doc))
+            }, 2000)
+        })
+        return () => dispose()
+    }, [doc])
 
     const handleSaveContent = useCallback(
         (itemId: string, content: string) => {
