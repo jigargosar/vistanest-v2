@@ -77,4 +77,53 @@ export const TOutlineDocument = nodeType<OutlineDocument>().actions({
             this.cursorItemId = visible[idx - 1]
         }
     },
+
+    indentItem(): void {
+        const loc = findParentOf(this.root, this.cursorItemId)
+        if (!loc) return
+        if (loc.index === 0) return // no previous sibling to indent under
+
+        const prevSibling = loc.parent.children[loc.index - 1]
+        const [item] = loc.parent.children.splice(loc.index, 1)
+        prevSibling.children.push(item)
+        // cursor stays on the same item
+    },
+
+    outdentItem(): void {
+        const loc = findParentOf(this.root, this.cursorItemId)
+        if (!loc) return
+
+        // Find grandparent — if parent is root, can't outdent
+        const grandparentLoc = findParentOf(this.root, loc.parent.id)
+        if (!grandparentLoc) return
+
+        const [item] = loc.parent.children.splice(loc.index, 1)
+        // Insert after parent in grandparent's children
+        grandparentLoc.parent.children.splice(grandparentLoc.index + 1, 0, item)
+        // cursor stays on the same item
+    },
+
+    moveItemUp(): void {
+        const loc = findParentOf(this.root, this.cursorItemId)
+        if (!loc) return
+        if (loc.index === 0) return
+
+        const [item] = loc.parent.children.splice(loc.index, 1)
+        loc.parent.children.splice(loc.index - 1, 0, item)
+    },
+
+    moveItemDown(): void {
+        const loc = findParentOf(this.root, this.cursorItemId)
+        if (!loc) return
+        if (loc.index >= loc.parent.children.length - 1) return
+
+        const [item] = loc.parent.children.splice(loc.index, 1)
+        loc.parent.children.splice(loc.index + 1, 0, item)
+    },
+
+    toggleCollapse(): void {
+        const item = findItemById(this.root, this.cursorItemId)
+        if (!item) return
+        item.isCollapsed = !item.isCollapsed
+    },
 })

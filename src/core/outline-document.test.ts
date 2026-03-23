@@ -92,3 +92,107 @@ describe('TOutlineDocument.moveCursorUp', () => {
         expect(doc.cursorItemId).toBe(firstId)
     })
 })
+
+describe('TOutlineDocument.indentItem', () => {
+    it('makes current item a child of its previous sibling', () => {
+        const doc = createDocument('Test')
+        TOutlineDocument.insertItemBelow(doc)
+        const secondId = doc.cursorItemId
+        TOutlineDocument.indentItem(doc)
+        expect(doc.root.children.length).toBe(1)
+        expect(doc.root.children[0].children[0].id).toBe(secondId)
+        expect(doc.cursorItemId).toBe(secondId)
+    })
+
+    it('does nothing for first item (no previous sibling)', () => {
+        const doc = createDocument('Test')
+        TOutlineDocument.indentItem(doc)
+        expect(doc.root.children.length).toBe(1)
+    })
+})
+
+describe('TOutlineDocument.outdentItem', () => {
+    it('moves item out one level, placing after its parent', () => {
+        const doc = createDocument('Test')
+        TOutlineDocument.insertItemBelow(doc)
+        TOutlineDocument.indentItem(doc)
+        const itemId = doc.cursorItemId
+        TOutlineDocument.outdentItem(doc)
+        expect(doc.root.children.length).toBe(2)
+        expect(doc.root.children[1].id).toBe(itemId)
+    })
+
+    it('does nothing for top-level items', () => {
+        const doc = createDocument('Test')
+        TOutlineDocument.outdentItem(doc)
+        expect(doc.root.children.length).toBe(1)
+    })
+})
+
+describe('TOutlineDocument.moveItemUp', () => {
+    it('swaps item with previous sibling', () => {
+        const doc = createDocument('Test')
+        const firstId = doc.cursorItemId
+        TOutlineDocument.insertItemBelow(doc)
+        const secondId = doc.cursorItemId
+        TOutlineDocument.moveItemUp(doc)
+        expect(doc.root.children[0].id).toBe(secondId)
+        expect(doc.root.children[1].id).toBe(firstId)
+    })
+
+    it('does nothing for first item', () => {
+        const doc = createDocument('Test')
+        const firstId = doc.cursorItemId
+        TOutlineDocument.moveItemUp(doc)
+        expect(doc.root.children[0].id).toBe(firstId)
+    })
+})
+
+describe('TOutlineDocument.moveItemDown', () => {
+    it('swaps item with next sibling', () => {
+        const doc = createDocument('Test')
+        const firstId = doc.cursorItemId
+        TOutlineDocument.insertItemBelow(doc)
+        TOutlineDocument.moveCursorUp(doc)
+        TOutlineDocument.moveItemDown(doc)
+        expect(doc.root.children[0].id).not.toBe(firstId)
+        expect(doc.root.children[1].id).toBe(firstId)
+    })
+
+    it('does nothing for last item', () => {
+        const doc = createDocument('Test')
+        TOutlineDocument.moveItemDown(doc)
+        expect(doc.root.children.length).toBe(1)
+    })
+})
+
+describe('TOutlineDocument.toggleCollapse', () => {
+    it('collapses cursor item', () => {
+        const doc = createDocument('Test')
+        TOutlineDocument.insertItemBelow(doc)
+        TOutlineDocument.indentItem(doc)
+        TOutlineDocument.moveCursorUp(doc)
+        TOutlineDocument.toggleCollapse(doc)
+        const parent = findItemById(doc.root, doc.cursorItemId)!
+        expect(parent.isCollapsed).toBe(true)
+    })
+
+    it('skips collapsed children when navigating', () => {
+        // Build: [A [B], C]
+        const doc = createDocument('Test')
+        const aId = doc.cursorItemId
+        TOutlineDocument.insertItemBelow(doc) // cursor on B
+        TOutlineDocument.indentItem(doc) // B is now child of A
+        TOutlineDocument.moveCursorUp(doc) // cursor on A
+        TOutlineDocument.insertItemBelow(doc) // cursor on C (sibling of A)
+        const cId = doc.cursorItemId
+
+        // Collapse A, navigate from A down — should skip B, land on C
+        TOutlineDocument.moveCursorUp(doc) // cursor on B (visible child of A)
+        TOutlineDocument.moveCursorUp(doc) // cursor on A
+        expect(doc.cursorItemId).toBe(aId)
+        TOutlineDocument.toggleCollapse(doc)
+        TOutlineDocument.moveCursorDown(doc)
+        expect(doc.cursorItemId).toBe(cId)
+    })
+})
