@@ -11,13 +11,32 @@ export const App = observer(function App() {
     const [{ doc, undoManager }] = useState(() => createUndoableDocument('My First List'))
     const [keyboard] = useState(() => new KeyboardManager())
 
+    const handleSaveContent = useCallback(
+        (itemId: string, content: string) => {
+            const item = findItemById(doc.root, itemId)
+            if (item) TOutlineItem.setContent(item, content)
+        },
+        [doc],
+    )
+
+    const handleExitEdit = useCallback(() => {
+        keyboard.exitEditMode()
+    }, [keyboard])
+
+    const handleEnterInEdit = useCallback(
+        (itemId: string, content: string) => {
+            const item = findItemById(doc.root, itemId)
+            if (item) TOutlineItem.setContent(item, content)
+            TOutlineDocument.insertItemBelow(doc)
+            // Stay in edit mode for the new item
+        },
+        [doc],
+    )
+
     const handleKeyDown = useCallback(
         (e: KeyboardEvent) => {
             if (keyboard.mode === 'edit') {
-                if (e.key === 'Escape') {
-                    keyboard.exitEditMode()
-                    e.preventDefault()
-                }
+                // Edit mode keys are handled by ItemEditor
                 return
             }
 
@@ -77,7 +96,13 @@ export const App = observer(function App() {
     return (
         <div className="min-h-screen bg-gray-950 text-gray-100 p-4 max-w-3xl mx-auto">
             <div className="text-xs text-gray-500 mb-2">Mode: {keyboard.mode}</div>
-            <OutlineView doc={doc} />
+            <OutlineView
+                doc={doc}
+                isEditing={keyboard.mode === 'edit'}
+                onSaveContent={handleSaveContent}
+                onExitEdit={handleExitEdit}
+                onEnterInEdit={handleEnterInEdit}
+            />
         </div>
     )
 })
