@@ -13,6 +13,8 @@ import { OutlineView } from './OutlineView'
 import { Toast } from './Toast'
 import { CheckpointPanel } from './CheckpointPanel'
 import { ListSwitcher } from './ListSwitcher'
+import { CommandPalette } from './CommandPalette'
+import { exportDocumentAsJson } from '../persistence/export'
 
 export const App = observer(function App() {
     const [appStore] = useState(() => new AppStore())
@@ -20,6 +22,10 @@ export const App = observer(function App() {
     const [checkpointStore] = useState(() => new CheckpointStore())
     const [toastMessage, setToastMessage] = useState<string | null>(null)
     const [checkpointPanelOpen, setCheckpointPanelOpen] = useState(false)
+    const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
+    const pendingKeyRef = useRef<string | null>(null)
+    const pendingKeyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const recentDeletionsRef = useRef<Array<{ item: unknown; parentId: string; index: number }>>([])
     const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const activityDetectorRef = useRef<ActivityDetector | null>(null)
     const snapshotDisposeRef = useRef<(() => void) | null>(null)
@@ -92,62 +98,134 @@ export const App = observer(function App() {
         [doc],
     )
 
+    const executeAction = useCallback(
+        (action: string) => {
+            const item = findItemById(doc.root, doc.cursorItemId)
+            switch (action) {
+                case 'moveCursorDown': TOutlineDocument.moveCursorDown(doc); break
+                case 'moveCursorUp': TOutlineDocument.moveCursorUp(doc); break
+                case 'insertItemBelow': TOutlineDocument.insertItemBelow(doc); keyboard.enterEditMode(); break
+                case 'insertItemAbove': TOutlineDocument.insertItemAbove(doc); keyboard.enterEditMode(); break
+                case 'enterEditMode': keyboard.enterEditMode(); break
+                case 'indentItem': TOutlineDocument.indentItem(doc); break
+                case 'outdentItem': TOutlineDocument.outdentItem(doc); break
+                case 'toggleComplete': if (item) TOutlineItem.toggleComplete(item); break
+                case 'toggleCollapse': TOutlineDocument.toggleCollapse(doc); break
+                case 'undo': if (undoManager.canUndo) { undoManager.undo(); setToastMessage('Undo') }; break
+                case 'redo': if (undoManager.canRedo) { undoManager.redo(); setToastMessage('Redo') }; break
+                case 'moveItemUp': TOutlineDocument.moveItemUp(doc); break
+                case 'moveItemDown': TOutlineDocument.moveItemDown(doc); break
+                case 'deleteItem': {
+                    const deleted = TOutlineDocument.deleteItem(doc)
+                    if (deleted) {
+                        recentDeletionsRef.current.push({
+                            item: getSnapshot(deleted.item),
+                            parentId: deleted.deletedFromParentId,
+                            index: deleted.deletedFromIndex,
+                        })
+                    }
+                    break
+                }
+                case 'restoreDeleted': {
+                    const last = recentDeletionsRef.current.pop()
+                    if (last) {
+                        undoManager.undo()
+                        setToastMessage('Restored deleted item')
+                    } else {
+                        setToastMessage('Nothing to restore')
+                    }
+                    break
+                }
+                case 'export': exportDocumentAsJson(doc); break
+                case 'checkpoint': checkpointStore.createCheckpoint(getSnapshot(doc), 'Manual checkpoint'); setToastMessage('Checkpoint saved'); break
+            }
+        },
+        [doc, undoManager, keyboard, checkpointStore],
+    )
+
     const handleKeyDown = useCallback(
         (e: KeyboardEvent) => {
+            if (commandPaletteOpen) return
             if (keyboard.mode === 'edit') return
 
-            let handled = true
             const ctrl = e.ctrlKey || e.metaKey
+            let handled = true
 
-            if (e.key === 'j') {
-                TOutlineDocument.moveCursorDown(doc)
+            // Double-letter combo detection
+            if (pendingKeyRef.current) {
+                const combo = pendingKeyRef.current + e.key
+                if (pendingKeyTimerRef.current) clearTimeout(pendingKeyTimerRef.current)
+                pendingKeyRef.current = null
+
+                if (combo === 'dd') { executeAction('deleteItem'); e.preventDefault(); return }
+                if (combo === 'ee') { executeAction('enterEditMode'); e.preventDefault(); return }
+                if (combo === 'nn') {
+                    // Toggle note — for now just enter edit mode
+                    executeAction('enterEditMode'); e.preventDefault(); return
+                }
+                if (combo === 'hc') {
+                    setToastMessage('Hide completed (not yet implemented)')
+                    e.preventDefault(); return
+                }
+                if (combo === 'rd') {
+                    executeAction('restoreDeleted')
+                    e.preventDefault(); return
+                }
+                // Not a valid combo — execute the pending key's action first, then handle current
+            }
+
+            // Check if this key starts a combo
+            if ((e.key === 'd' || e.key === 'e' || e.key === 'n' || e.key === 'h' || e.key === 'r') && !ctrl) {
+                pendingKeyRef.current = e.key
+                pendingKeyTimerRef.current = setTimeout(() => {
+                    // Timeout — execute as single key
+                    pendingKeyRef.current = null
+                }, 400)
+                e.preventDefault()
+                return
+            }
+
+            if (e.key === '?') {
+                setCommandPaletteOpen(true)
+            } else if (e.key === 'j') {
+                executeAction('moveCursorDown')
             } else if (e.key === 'k') {
-                TOutlineDocument.moveCursorUp(doc)
+                executeAction('moveCursorUp')
             } else if (e.key === 'o' && !ctrl) {
-                TOutlineDocument.insertItemBelow(doc)
-                keyboard.enterEditMode()
+                executeAction('insertItemBelow')
             } else if (e.key === 'O') {
-                TOutlineDocument.insertItemAbove(doc)
-                keyboard.enterEditMode()
+                executeAction('insertItemAbove')
             } else if (e.key === 'Enter') {
-                keyboard.enterEditMode()
+                executeAction('enterEditMode')
             } else if (e.key === 'Tab' && !e.shiftKey) {
-                TOutlineDocument.indentItem(doc)
+                executeAction('indentItem')
             } else if (e.key === 'Tab' && e.shiftKey) {
-                TOutlineDocument.outdentItem(doc)
+                executeAction('outdentItem')
             } else if (e.key === ' ') {
-                const item = findItemById(doc.root, doc.cursorItemId)
-                if (item) TOutlineItem.toggleComplete(item)
-            } else if (e.key === 'h') {
-                TOutlineDocument.toggleCollapse(doc)
+                executeAction('toggleComplete')
             } else if (e.key === 'l') {
-                TOutlineDocument.toggleCollapse(doc)
+                executeAction('toggleCollapse')
             } else if (e.key === 'z' && ctrl && !e.shiftKey) {
-                if (undoManager.canUndo) {
-                    undoManager.undo()
-                    setToastMessage('Undo')
-                }
+                executeAction('undo')
             } else if ((e.key === 'z' && ctrl && e.shiftKey) || (e.key === 'Z' && ctrl)) {
-                if (undoManager.canRedo) {
-                    undoManager.redo()
-                    setToastMessage('Redo')
-                }
+                executeAction('redo')
             } else if (e.key === 'ArrowUp' && ctrl) {
-                TOutlineDocument.moveItemUp(doc)
+                executeAction('moveItemUp')
             } else if (e.key === 'ArrowDown' && ctrl) {
-                TOutlineDocument.moveItemDown(doc)
+                executeAction('moveItemDown')
             } else if (e.key === 'c' && ctrl && e.shiftKey) {
-                checkpointStore.createCheckpoint(getSnapshot(doc), 'Manual checkpoint')
-                setToastMessage('Checkpoint saved')
+                executeAction('checkpoint')
             } else if (e.key === 'p' && ctrl && e.shiftKey) {
                 setCheckpointPanelOpen((prev) => !prev)
+            } else if (e.key === 'e' && ctrl && e.shiftKey) {
+                executeAction('export')
             } else {
                 handled = false
             }
 
             if (handled) e.preventDefault()
         },
-        [doc, undoManager, keyboard, checkpointStore],
+        [doc, undoManager, keyboard, checkpointStore, commandPaletteOpen, executeAction],
     )
 
     useEffect(() => {
@@ -171,6 +249,11 @@ export const App = observer(function App() {
                 isOpen={checkpointPanelOpen}
                 onClose={() => setCheckpointPanelOpen(false)}
                 onRestore={handleRestoreCheckpoint}
+            />
+            <CommandPalette
+                isOpen={commandPaletteOpen}
+                onClose={() => setCommandPaletteOpen(false)}
+                onExecute={executeAction}
             />
             <Toast message={toastMessage} onDismiss={() => setToastMessage(null)} />
         </div>

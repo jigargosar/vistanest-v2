@@ -14,13 +14,15 @@ export const OutlineView = observer(function OutlineView({ doc, isEditing, onSav
     return (
         <div className="font-mono text-sm">
             <h2 className="text-lg font-bold mb-2 px-2">{doc.title}</h2>
-            {doc.root.children.map((item) => (
+            {doc.root.children.map((item, i) => (
                 <OutlineItemView
                     key={item.id}
                     item={item}
                     depth={0}
                     cursorItemId={doc.cursorItemId}
                     isEditing={isEditing}
+                    checkboxMode={doc.checkboxMode}
+                    siblingIndex={i}
                     onSaveContent={onSaveContent}
                     onExitEdit={onExitEdit}
                     onEnterInEdit={onEnterInEdit}
