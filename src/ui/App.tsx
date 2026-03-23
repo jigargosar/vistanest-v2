@@ -6,10 +6,12 @@ import { TOutlineItem } from '../core/outline-item'
 import { findItemById } from '../core/tree-helpers'
 import { KeyboardManager } from '../keyboard/keyboard-manager'
 import { OutlineView } from './OutlineView'
+import { Toast } from './Toast'
 
 export const App = observer(function App() {
     const [{ doc, undoManager }] = useState(() => createUndoableDocument('My First List'))
     const [keyboard] = useState(() => new KeyboardManager())
+    const [toastMessage, setToastMessage] = useState<string | null>(null)
 
     const handleSaveContent = useCallback(
         (itemId: string, content: string) => {
@@ -68,11 +70,15 @@ export const App = observer(function App() {
             } else if (e.key === 'l') {
                 TOutlineDocument.toggleCollapse(doc)
             } else if (e.key === 'z' && ctrl && !e.shiftKey) {
-                undoManager.undo()
-            } else if (e.key === 'z' && ctrl && e.shiftKey) {
-                undoManager.redo()
-            } else if (e.key === 'Z' && ctrl) {
-                undoManager.redo()
+                if (undoManager.canUndo) {
+                    undoManager.undo()
+                    setToastMessage('Undo')
+                }
+            } else if ((e.key === 'z' && ctrl && e.shiftKey) || (e.key === 'Z' && ctrl)) {
+                if (undoManager.canRedo) {
+                    undoManager.redo()
+                    setToastMessage('Redo')
+                }
             } else if (e.key === 'ArrowUp' && ctrl) {
                 TOutlineDocument.moveItemUp(doc)
             } else if (e.key === 'ArrowDown' && ctrl) {
@@ -103,6 +109,7 @@ export const App = observer(function App() {
                 onExitEdit={handleExitEdit}
                 onEnterInEdit={handleEnterInEdit}
             />
+            <Toast message={toastMessage} onDismiss={() => setToastMessage(null)} />
         </div>
     )
 })
