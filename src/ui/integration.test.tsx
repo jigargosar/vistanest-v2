@@ -247,7 +247,7 @@ describe('Integration — full user workflows', () => {
   })
 
   it('h collapses subtree, l expands it', () => {
-    const { welcome, standalone } = seedOutline()
+    const { welcome } = seedOutline()
     renderApp()
 
     expect(visibleTexts()).toContain('Child one')
@@ -382,7 +382,7 @@ describe('Integration — full user workflows', () => {
   })
 
   it('full session: navigate, create, edit, complete, collapse, undo', () => {
-    const { welcome, child1, child2, standalone } = seedOutline()
+    const { welcome, standalone } = seedOutline()
     renderApp()
 
     // 1. Navigate down to Standalone
