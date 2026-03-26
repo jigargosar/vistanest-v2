@@ -1,1 +1,22 @@
 @import "tailwindcss";
+
+@theme {
+  /* Background & Surface */
+  --color-bg: #0c0c0e;
+  --color-surface: #1a1a1e;
+  --color-border: #2a2a2e;
+
+  /* Text */
+  --color-text-primary: #e8e6e3;
+  --color-text-secondary: #a0a0a0;
+
+  /* Amber accent palette */
+  --color-amber: #e5a832;
+  --color-amber-light: #f0c060;
+  --color-amber-dark: #c48a1a;
+
+  /* Font families */
+  --font-body: "IBM Plex Sans", sans-serif;
+  --font-heading: "Space Grotesk", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+}
