@@ -7,9 +7,9 @@ export const OutlineView = observer(function OutlineView() {
   const items = state.getVisibleItems()
 
   return (
-    <div className="font-mono text-sm">
+    <div className="mx-auto max-w-[900px] px-6 font-body text-base text-text-primary">
       {items.length === 0 ? (
-        <div className="p-4 opacity-40">No items. Press o to create one.</div>
+        <div className="p-4 text-text-secondary">No items. Press o to create one.</div>
       ) : (
         items.map((item) => <OutlineItemRow key={item.id} item={item} />)
       )}

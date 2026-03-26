@@ -138,14 +138,15 @@ describe('OutlineItemRow — edit mode', () => {
     expect(state.editingItemId).toBeNull()
   })
 
-  it('input has no border and transparent background (inline style)', () => {
+  it('input has themed styling with amber border and transparent background', () => {
     const id = insertBelow(state, um)
     startEditing(state, um, id)
 
     renderRow(id)
     const input = screen.getByTestId('inline-edit-input') as HTMLInputElement
     expect(input.className).toContain('bg-transparent')
-    expect(input.className).toContain('border-none')
+    expect(input.className).toContain('border-amber')
     expect(input.className).toContain('outline-none')
+    expect(input.className).toContain('font-body')
   })
 })
