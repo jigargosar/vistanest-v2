@@ -239,6 +239,7 @@ export function indentItem(state: AppState, um: UndoManager, itemId: string) {
 
 /**
  * Outdent: move item up one level, placing it after its current parent.
+ * Subsequent siblings of the outdented item become its children (standard outliner behavior).
  * No-op if item is at root level.
  */
 export function outdentItem(state: AppState, um: UndoManager, itemId: string) {
@@ -246,8 +247,20 @@ export function outdentItem(state: AppState, um: UndoManager, itemId: string) {
     const item = state.getItem(itemId)
     if (!item || item.parentId === null) return // Can't outdent root
 
-    const parent = state.getItem(item.parentId)
+    const oldParentId = item.parentId
+    const parent = state.getItem(oldParentId)
     if (!parent) return
+
+    const oldSiblings = state.getChildren(oldParentId)
+    const itemIdx = oldSiblings.findIndex((s) => s.id === itemId)
+
+    // Re-parent subsequent siblings as children of the outdented item
+    const existingChildren = state.getChildren(itemId)
+    let nextSort = existingChildren.length
+    for (let i = itemIdx + 1; i < oldSiblings.length; i++) {
+      oldSiblings[i].setParentId(itemId)
+      oldSiblings[i].setSortOrder(nextSort++)
+    }
 
     const grandparentId = parent.parentId
     const parentSiblings = state.getChildren(grandparentId)
@@ -260,7 +273,7 @@ export function outdentItem(state: AppState, um: UndoManager, itemId: string) {
 
     item.setParentId(grandparentId)
     item.setSortOrder(parent.sortOrder + 1)
-    renumberChildren(state, parent.id) // fix old parent
+    renumberChildren(state, oldParentId) // fix old parent
   })
 }
 
