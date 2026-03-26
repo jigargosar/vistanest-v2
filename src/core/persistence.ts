@@ -97,3 +97,27 @@ export function exportStateAsJSON(state: AppState): string {
   const snapshot = getSnapshot(state)
   return JSON.stringify(snapshot, null, 2)
 }
+
+/**
+ * Trigger a browser download of the current AppState as a JSON file.
+ * File name: `vistanest-export-{ISO date}.json`
+ */
+export function downloadExportJson(state: AppState): void {
+  const json = exportStateAsJSON(state)
+  const blob = new Blob([json], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+
+  const date = new Date().toISOString().slice(0, 10) // YYYY-MM-DD
+  const filename = `vistanest-export-${date}.json`
+
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = filename
+  anchor.style.display = 'none'
+  document.body.appendChild(anchor)
+  anchor.click()
+
+  // Cleanup
+  document.body.removeChild(anchor)
+  URL.revokeObjectURL(url)
+}

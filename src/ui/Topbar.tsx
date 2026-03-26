@@ -1,4 +1,9 @@
+import { useAppState } from './context'
+import { downloadExportJson } from '../core/persistence'
+
 export function Topbar() {
+  const { state } = useAppState()
+
   return (
     <header className="fixed top-0 left-0 right-0 z-20 h-12 bg-surface border-b border-border flex items-center px-4 gap-4">
       {/* Logo */}
@@ -27,6 +32,27 @@ export function Topbar() {
       </nav>
 
       <div className="flex-1" />
+
+      {/* Export button */}
+      <button
+        type="button"
+        onClick={() => downloadExportJson(state)}
+        className="h-7 flex items-center gap-1.5 rounded border border-border px-2 text-sm text-text-secondary font-body hover:bg-bg hover:text-text transition-colors"
+        aria-label="Export as JSON"
+        title="Export as JSON"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 20 20"
+          fill="currentColor"
+          className="w-4 h-4"
+          aria-hidden="true"
+        >
+          <path d="M10.75 2.75a.75.75 0 0 0-1.5 0v8.614L6.295 8.235a.75.75 0 1 0-1.09 1.03l4.25 4.5a.75.75 0 0 0 1.09 0l4.25-4.5a.75.75 0 0 0-1.09-1.03l-2.955 3.129V2.75Z" />
+          <path d="M3.5 12.75a.75.75 0 0 0-1.5 0v2.5A2.75 2.75 0 0 0 4.75 18h10.5A2.75 2.75 0 0 0 18 15.25v-2.5a.75.75 0 0 0-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5Z" />
+        </svg>
+        Export
+      </button>
 
       {/* Help button */}
       <button

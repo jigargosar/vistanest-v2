@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import 'fake-indexeddb/auto'
 import { registerRootStore, getSnapshot } from 'mobx-keystone'
 import { AppState, OutlineItem } from './model'
@@ -7,6 +7,7 @@ import {
   loadState,
   applyLoadedSnapshot,
   exportStateAsJSON,
+  downloadExportJson,
   closeDB,
 } from './persistence'
 import { createAppState, loadAppState, insertBelow, setContent, indentItem } from './api'
@@ -217,5 +218,67 @@ describe('loadAppState — hydrate from IDB snapshot', () => {
 
     expect(hydrated.state.items.size).toBe(2)
     expect(hydrated.undoManager.canUndo).toBe(true)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// downloadExportJson — browser download trigger
+// ---------------------------------------------------------------------------
+
+describe('downloadExportJson — triggers browser download', () => {
+  it('creates a blob URL, clicks a hidden anchor, and cleans up', () => {
+    const state = createTestState()
+    populateState(state)
+
+    const fakeUrl = 'blob:http://localhost/fake-blob-id'
+    const createObjectURLSpy = vi.fn().mockReturnValue(fakeUrl)
+    const revokeObjectURLSpy = vi.fn()
+    vi.stubGlobal('URL', {
+      ...URL,
+      createObjectURL: createObjectURLSpy,
+      revokeObjectURL: revokeObjectURLSpy,
+    })
+
+    const clickSpy = vi.fn()
+    const fakeAnchor = {
+      href: '',
+      download: '',
+      style: { display: '' },
+      click: clickSpy,
+    } as unknown as HTMLAnchorElement
+
+    const createElementSpy = vi
+      .spyOn(document, 'createElement')
+      .mockReturnValue(fakeAnchor as any)
+    const appendChildSpy = vi.spyOn(document.body, 'appendChild').mockReturnValue(fakeAnchor)
+    const removeChildSpy = vi.spyOn(document.body, 'removeChild').mockReturnValue(fakeAnchor)
+
+    downloadExportJson(state)
+
+    // Verify anchor was created correctly
+    expect(createElementSpy).toHaveBeenCalledWith('a')
+    expect(fakeAnchor.href).toBe(fakeUrl)
+    expect(fakeAnchor.download).toMatch(/^vistanest-export-\d{4}-\d{2}-\d{2}\.json$/)
+    expect(fakeAnchor.style.display).toBe('none')
+
+    // Verify Blob was created and passed to createObjectURL
+    expect(createObjectURLSpy).toHaveBeenCalledOnce()
+    const blob = createObjectURLSpy.mock.calls[0][0] as Blob
+    expect(blob).toBeInstanceOf(Blob)
+    expect(blob.type).toBe('application/json')
+
+    // Verify click was triggered
+    expect(clickSpy).toHaveBeenCalledOnce()
+
+    // Verify cleanup
+    expect(appendChildSpy).toHaveBeenCalledWith(fakeAnchor)
+    expect(removeChildSpy).toHaveBeenCalledWith(fakeAnchor)
+    expect(revokeObjectURLSpy).toHaveBeenCalledWith(fakeUrl)
+
+    // Restore mocks
+    createElementSpy.mockRestore()
+    appendChildSpy.mockRestore()
+    removeChildSpy.mockRestore()
+    vi.unstubAllGlobals()
   })
 })
