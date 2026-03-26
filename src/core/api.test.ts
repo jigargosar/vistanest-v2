@@ -516,6 +516,30 @@ describe('getVisibleItems — deep collapse', () => {
   })
 })
 
+describe('getDepth', () => {
+  it('returns 0 for root items', () => {
+    const a = insertBelow(state, um)
+    expect(state.getDepth(a)).toBe(0)
+  })
+
+  it('returns correct depth for nested items', () => {
+    const a = insertBelow(state, um)
+    const b = insertBelow(state, um, a)
+    const c = insertBelow(state, um, b)
+    indentItem(state, um, b) // b under a — depth 1
+    indentItem(state, um, c) // c under a
+    indentItem(state, um, c) // c under b — depth 2
+
+    expect(state.getDepth(a)).toBe(0)
+    expect(state.getDepth(b)).toBe(1)
+    expect(state.getDepth(c)).toBe(2)
+  })
+
+  it('returns 0 for unknown item', () => {
+    expect(state.getDepth('nonexistent')).toBe(0)
+  })
+})
+
 describe('sort order stability', () => {
   it('operations don\'t create ordering bugs after multiple indent/outdent cycles', () => {
     const a = insertBelow(state, um)

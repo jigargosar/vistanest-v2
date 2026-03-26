@@ -114,6 +114,17 @@ export class AppState extends Model({
     return this.getChildren(item.parentId)
   }
 
+  /** Get nesting depth of an item (root = 0). Walks parentId chain. */
+  getDepth(itemId: string): number {
+    let depth = 0
+    let current = this.getItem(itemId)
+    while (current && current.parentId !== null) {
+      depth++
+      current = this.getItem(current.parentId)
+    }
+    return depth
+  }
+
   /**
    * Recursive DFS of visible items.
    * Skips archived items. Skips children of collapsed items.
