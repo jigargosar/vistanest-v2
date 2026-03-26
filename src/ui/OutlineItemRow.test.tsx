@@ -136,7 +136,7 @@ describe('OutlineItemRow — edit mode', () => {
     expect(state.editingItemId).toBeNull()
   })
 
-  it('Enter on empty input just stops editing without creating a new item', () => {
+  it('Enter on empty input archives the blank item and stops editing', () => {
     const id = insertBelow(state, um)
     // Leave content empty
     startEditing(state, um, id)
@@ -148,14 +148,15 @@ describe('OutlineItemRow — edit mode', () => {
     // Don't type anything, just press Enter
     fireEvent.keyDown(input, { key: 'Enter' })
 
-    // Should stop editing without creating a new item
+    // Should stop editing and archive the empty item
     expect(state.editingItemId).toBeNull()
-    // Only the original root + the one inserted item should exist
+    expect(state.getItem(id)!.isArchived).toBe(true)
+    // Item is hidden from visible list
     const visibleItems = state.getVisibleItems()
-    expect(visibleItems.length).toBe(1)
+    expect(visibleItems.length).toBe(0)
   })
 
-  it('Enter on whitespace-only input just stops editing without creating a new item', () => {
+  it('Enter on whitespace-only input archives the blank item and stops editing', () => {
     const id = insertBelow(state, um)
     startEditing(state, um, id)
     um.clearUndo()
@@ -166,11 +167,11 @@ describe('OutlineItemRow — edit mode', () => {
     fireEvent.change(input, { target: { value: '   ' } })
     fireEvent.keyDown(input, { key: 'Enter' })
 
-    // Should stop editing without creating a new item
+    // Should stop editing and archive the whitespace-only item
     expect(state.editingItemId).toBeNull()
-    expect(state.getItem(id)!.content).toBe('   ')
+    expect(state.getItem(id)!.isArchived).toBe(true)
     const visibleItems = state.getVisibleItems()
-    expect(visibleItems.length).toBe(1)
+    expect(visibleItems.length).toBe(0)
   })
 
   it('input has themed styling with amber border and transparent background', () => {

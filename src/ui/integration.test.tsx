@@ -172,23 +172,25 @@ describe('Integration — full user workflows', () => {
     expect(state.cursorItemId).toBe(newId)
   })
 
-  it('Enter in edit mode on empty input just stops editing — no new item', () => {
+  it('Enter in edit mode on empty input archives the blank item', () => {
     seedOutline()
     renderApp()
+
+    const countBefore = state.getVisibleItems().length
 
     // Create a new item via o
     fire('o')
     const newId = state.editingItemId!
     expect(newId).toBeTruthy()
-
-    const itemCountBefore = state.getVisibleItems().length
+    expect(state.getVisibleItems().length).toBe(countBefore + 1)
 
     const input = screen.getByTestId('inline-edit-input') as HTMLInputElement
     act(() => { fireEvent.keyDown(input, { key: 'Enter' }) })
 
-    // Should stop editing, NOT create another item
+    // Should stop editing and archive the empty item
     expect(state.editingItemId).toBeNull()
-    expect(state.getVisibleItems().length).toBe(itemCountBefore)
+    expect(state.getItem(newId)!.isArchived).toBe(true)
+    expect(state.getVisibleItems().length).toBe(countBefore)
   })
 
   it('rapid-fire Enter creates sequential items', () => {
@@ -220,25 +222,28 @@ describe('Integration — full user workflows', () => {
     expect(thirdIdx).toBe(secondIdx + 1)
   })
 
-  it('rapid Enter then Enter-on-empty stops cleanly', () => {
+  it('rapid Enter then Enter-on-empty archives the blank and stops', () => {
     seedOutline()
     const lastId = state.getVisibleItems()[state.getVisibleItems().length - 1].id
     state.setCursor(lastId)
     renderApp()
+
+    const countBefore = state.getVisibleItems().length
 
     fire('o')
     let input = screen.getByTestId('inline-edit-input') as HTMLInputElement
     fireEvent.change(input, { target: { value: 'Item A' } })
     act(() => { fireEvent.keyDown(input, { key: 'Enter' }) })
 
-    // Now on empty new item — Enter should stop
+    // Now on empty new item — Enter should archive it and stop
     input = screen.getByTestId('inline-edit-input') as HTMLInputElement
     expect(input.value).toBe('')
-    const countBefore = state.getVisibleItems().length
     act(() => { fireEvent.keyDown(input, { key: 'Enter' }) })
 
     expect(state.editingItemId).toBeNull()
-    expect(state.getVisibleItems().length).toBe(countBefore)
+    // Only "Item A" was added, the blank was archived
+    expect(state.getVisibleItems().length).toBe(countBefore + 1)
+    expect(visibleTexts()).toContain('Item A')
   })
 
   it('h collapses subtree, l expands it', () => {

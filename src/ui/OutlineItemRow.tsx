@@ -1,7 +1,7 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { observer } from 'mobx-react-lite'
 import { useAppState } from './context'
-import { setContent, stopEditing, insertBelow, startEditing } from '../core/api'
+import { setContent, stopEditing, insertBelow, startEditing, archiveItem } from '../core/api'
 import type { OutlineItem } from '../core/model'
 
 interface OutlineItemRowProps {
@@ -17,6 +17,14 @@ export const OutlineItemRow = observer(function OutlineItemRow({ item }: Outline
   const isEditing = state.editingItemId === item.id
 
   const [localValue, setLocalValue] = useState(item.content)
+  const rowRef = useRef<HTMLDivElement>(null)
+
+  // Scroll cursor item into view when it becomes the cursor
+  useEffect(() => {
+    if (isCursor && rowRef.current) {
+      rowRef.current.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' })
+    }
+  }, [isCursor])
 
   // Reset local value when we enter edit mode for this item
   // (MobX observer re-renders when editingItemId changes)
@@ -45,9 +53,10 @@ export const OutlineItemRow = observer(function OutlineItemRow({ item }: Outline
     } else if (e.key === 'Enter') {
       e.preventDefault()
       e.stopPropagation()
-      // If empty, just stop editing — don't create more empty items
+      // If empty, archive the blank item and return to navigate mode
       if (localValue.trim() === '') {
-        commitAndStop()
+        stopEditing(state, undoManager)
+        archiveItem(state, undoManager, item.id)
         return
       }
       // 1. Save current content
@@ -71,6 +80,7 @@ export const OutlineItemRow = observer(function OutlineItemRow({ item }: Outline
 
   return (
     <div
+      ref={rowRef}
       data-item-id={item.id}
       className={`flex items-center min-h-[36px] py-0.5 px-2 ${
         isCursor
