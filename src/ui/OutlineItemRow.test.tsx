@@ -136,6 +136,43 @@ describe('OutlineItemRow — edit mode', () => {
     expect(state.editingItemId).toBeNull()
   })
 
+  it('Enter on empty input just stops editing without creating a new item', () => {
+    const id = insertBelow(state, um)
+    // Leave content empty
+    startEditing(state, um, id)
+    um.clearUndo()
+
+    renderRow(id)
+    const input = screen.getByTestId('inline-edit-input') as HTMLInputElement
+
+    // Don't type anything, just press Enter
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    // Should stop editing without creating a new item
+    expect(state.editingItemId).toBeNull()
+    // Only the original root + the one inserted item should exist
+    const visibleItems = state.getVisibleItems()
+    expect(visibleItems.length).toBe(1)
+  })
+
+  it('Enter on whitespace-only input just stops editing without creating a new item', () => {
+    const id = insertBelow(state, um)
+    startEditing(state, um, id)
+    um.clearUndo()
+
+    renderRow(id)
+    const input = screen.getByTestId('inline-edit-input') as HTMLInputElement
+
+    fireEvent.change(input, { target: { value: '   ' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    // Should stop editing without creating a new item
+    expect(state.editingItemId).toBeNull()
+    expect(state.getItem(id)!.content).toBe('   ')
+    const visibleItems = state.getVisibleItems()
+    expect(visibleItems.length).toBe(1)
+  })
+
   it('input has themed styling with amber border and transparent background', () => {
     const id = insertBelow(state, um)
     startEditing(state, um, id)

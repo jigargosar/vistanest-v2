@@ -40,9 +40,16 @@ export const OutlineItemRow = observer(function OutlineItemRow({ item }: Outline
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'Escape') {
       e.preventDefault()
+      e.stopPropagation()
       commitAndStop()
     } else if (e.key === 'Enter') {
       e.preventDefault()
+      e.stopPropagation()
+      // If empty, just stop editing — don't create more empty items
+      if (localValue.trim() === '') {
+        commitAndStop()
+        return
+      }
       // 1. Save current content
       setContent(state, undoManager, item.id, localValue)
       // 2. Stop editing current

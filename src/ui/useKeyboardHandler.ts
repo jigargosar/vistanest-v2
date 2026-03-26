@@ -75,6 +75,7 @@ export function useKeyboardHandler(): void {
           break
 
         case 'o':
+          e.preventDefault()
           if (cursorItemId) {
             const newId = insertBelow(state, undoManager, cursorItemId)
             startEditing(state, undoManager, newId)
@@ -83,6 +84,7 @@ export function useKeyboardHandler(): void {
 
         case 'O':
           // Shift+o — insertAbove
+          e.preventDefault()
           if (cursorItemId) {
             const newId = insertAbove(state, undoManager, cursorItemId)
             startEditing(state, undoManager, newId)
@@ -119,6 +121,7 @@ export function useKeyboardHandler(): void {
         }
 
         case 'Enter':
+          e.preventDefault()
           if (cursorItemId) startEditing(state, undoManager, cursorItemId)
           break
 

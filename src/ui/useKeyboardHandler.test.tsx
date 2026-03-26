@@ -194,6 +194,23 @@ describe('useKeyboardHandler — navigation mode', () => {
     expect(state.cursorItemId).toBeNull()
   })
 
+  it('o and O call preventDefault to avoid keystroke leaking into edit input', () => {
+    seedThree()
+    cleanup = renderHandler()
+
+    const oEvent = new KeyboardEvent('keydown', { key: 'o', bubbles: true, cancelable: true })
+    document.dispatchEvent(oEvent)
+    expect(oEvent.defaultPrevented).toBe(true)
+
+    // Reset — stop editing, move cursor back
+    state.setEditing(null)
+    state.setCursor(state.getVisibleItems()[0].id)
+
+    const OEvent = new KeyboardEvent('keydown', { key: 'O', bubbles: true, cancelable: true, shiftKey: true })
+    document.dispatchEvent(OEvent)
+    expect(OEvent.defaultPrevented).toBe(true)
+  })
+
   it('cleans up listener on unmount', () => {
     seedThree()
     cleanup = renderHandler()
