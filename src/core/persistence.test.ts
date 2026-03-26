@@ -9,6 +9,7 @@ import {
   exportStateAsJSON,
   closeDB,
 } from './persistence'
+import { createAppState, loadAppState, insertBelow, setContent, indentItem } from './api'
 import { deleteDB } from 'idb'
 
 /** Create a fresh registered AppState for testing. */
@@ -153,5 +154,68 @@ describe('persistence — exportStateAsJSON', () => {
     const parsed = JSON.parse(json)
 
     expect(parsed.title).toBe('Untitled')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// loadAppState — hydrate from snapshot
+// ---------------------------------------------------------------------------
+
+describe('loadAppState — hydrate from IDB snapshot', () => {
+  it('hydrates an AppState from a saved snapshot with all data intact', async () => {
+    const original = createAppState()
+    const item1 = insertBelow(original.state, original.undoManager)
+    setContent(original.state, original.undoManager, item1, 'Saved item')
+    const item2 = insertBelow(original.state, original.undoManager, item1)
+    setContent(original.state, original.undoManager, item2, 'Another item')
+    indentItem(original.state, original.undoManager, item2)
+
+    await saveState(original.state)
+
+    // Load and hydrate
+    const snapshot = await loadState()
+    expect(snapshot).not.toBeNull()
+
+    const hydrated = loadAppState(snapshot!)
+    expect(hydrated.state.items.size).toBe(original.state.items.size)
+
+    // Verify content survived
+    const hydratedItem = hydrated.state.getItem(item1)
+    expect(hydratedItem).toBeDefined()
+    expect(hydratedItem!.content).toBe('Saved item')
+
+    // Verify nested structure survived
+    const hydratedChild = hydrated.state.getItem(item2)
+    expect(hydratedChild).toBeDefined()
+    expect(hydratedChild!.parentId).toBe(item1)
+  })
+
+  it('produces a state with cleared undo history', async () => {
+    const original = createAppState()
+    insertBelow(original.state, original.undoManager)
+    await saveState(original.state)
+
+    const snapshot = await loadState()
+    const hydrated = loadAppState(snapshot!)
+
+    // Undo history should be empty — hydration is not undoable
+    expect(hydrated.undoManager.canUndo).toBe(false)
+  })
+
+  it('produces a state that supports new operations with undo', async () => {
+    const original = createAppState()
+    const firstId = insertBelow(original.state, original.undoManager)
+    setContent(original.state, original.undoManager, firstId, 'Original')
+    await saveState(original.state)
+
+    const snapshot = await loadState()
+    const hydrated = loadAppState(snapshot!)
+
+    // New operations should work and be undoable
+    const newId = insertBelow(hydrated.state, hydrated.undoManager)
+    setContent(hydrated.state, hydrated.undoManager, newId, 'New item')
+
+    expect(hydrated.state.items.size).toBe(2)
+    expect(hydrated.undoManager.canUndo).toBe(true)
   })
 })

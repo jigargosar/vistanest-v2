@@ -1,4 +1,4 @@
-import { registerRootStore, undoMiddleware, UndoManager } from 'mobx-keystone'
+import { registerRootStore, undoMiddleware, UndoManager, fromSnapshot } from 'mobx-keystone'
 import { AppState, OutlineItem, sortOrderFraci, type SortOrderIndex } from './model'
 
 // ---------------------------------------------------------------------------
@@ -10,6 +10,19 @@ export function createAppState(): { state: AppState; undoManager: UndoManager } 
   const state = new AppState({})
   registerRootStore(state)
   const undoManager = setupUndo(state)
+  return { state, undoManager }
+}
+
+/**
+ * Hydrate an AppState from a previously-saved snapshot.
+ * Calls fromSnapshot → registerRootStore → setupUndo → clearUndo.
+ * The clearUndo ensures the hydration itself isn't undoable.
+ */
+export function loadAppState(snapshot: unknown): { state: AppState; undoManager: UndoManager } {
+  const state = fromSnapshot<AppState>(snapshot as any)
+  registerRootStore(state)
+  const undoManager = setupUndo(state)
+  undoManager.clearUndo()
   return { state, undoManager }
 }
 
