@@ -7,13 +7,26 @@ import {
   ObjectMap,
   objectMap,
 } from 'mobx-keystone'
+import { fraciString, BASE62, type FractionalIndexOf } from 'fraci'
+
+// ---------------------------------------------------------------------------
+// Fractional indexing singleton
+// ---------------------------------------------------------------------------
+
+export const sortOrderFraci = fraciString({
+  brand: 'sortOrder',
+  lengthBase: BASE62,
+  digitBase: BASE62,
+})
+
+export type SortOrderIndex = FractionalIndexOf<typeof sortOrderFraci>
 
 @model('VistaNest/OutlineItem')
 export class OutlineItem extends Model({
   id: idProp,
   content: prop<string>(''),
   parentId: prop<string | null>(null),
-  sortOrder: prop<number>(0),
+  sortOrder: prop<string>(''),
   isCompleted: prop<boolean>(false),
   isCollapsed: prop<boolean>(false),
   isArchived: prop<boolean>(false),
@@ -30,7 +43,7 @@ export class OutlineItem extends Model({
   }
 
   @modelAction
-  setSortOrder(sortOrder: number) {
+  setSortOrder(sortOrder: string) {
     this.sortOrder = sortOrder
   }
 
@@ -90,7 +103,7 @@ export class AppState extends Model({
         children.push(item)
       }
     }
-    children.sort((a, b) => a.sortOrder - b.sortOrder)
+    children.sort((a, b) => (a.sortOrder < b.sortOrder ? -1 : a.sortOrder > b.sortOrder ? 1 : 0))
     return children
   }
 

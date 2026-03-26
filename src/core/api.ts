@@ -1,5 +1,5 @@
 import { registerRootStore, undoMiddleware, UndoManager } from 'mobx-keystone'
-import { AppState, OutlineItem } from './model'
+import { AppState, OutlineItem, sortOrderFraci, type SortOrderIndex } from './model'
 
 // ---------------------------------------------------------------------------
 // Bootstrap
@@ -48,14 +48,30 @@ export function _resetIdCounter() {
 }
 
 /**
- * Renumber sortOrders for children of a given parent so they're
- * sequential integers starting from 0. Prevents float drift.
+ * Generate a fractional index key between two existing keys.
+ * Wraps fraci's generator protocol — returns the first yielded value.
  */
-function renumberChildren(state: AppState, parentId: string | null) {
+function keyBetween(a: SortOrderIndex | null, b: SortOrderIndex | null): string {
+  const [key] = sortOrderFraci.generateKeyBetween(a, b)
+  return key as string
+}
+
+/**
+ * Get the last sort key among children of a parent, or null if no children.
+ */
+function lastKey(state: AppState, parentId: string | null): SortOrderIndex | null {
   const children = state.getChildren(parentId)
-  for (let i = 0; i < children.length; i++) {
-    children[i].setSortOrder(i)
-  }
+  if (children.length === 0) return null
+  return children[children.length - 1].sortOrder as SortOrderIndex
+}
+
+/**
+ * Get the first sort key among children of a parent, or null if no children.
+ */
+function firstKey(state: AppState, parentId: string | null): SortOrderIndex | null {
+  const children = state.getChildren(parentId)
+  if (children.length === 0) return null
+  return children[0].sortOrder as SortOrderIndex
 }
 
 // ---------------------------------------------------------------------------
@@ -78,20 +94,19 @@ export function insertBelow(
 
     if (!referenceId) {
       // Insert as last root child
-      const rootChildren = state.getChildren(null)
-      newItem.setSortOrder(rootChildren.length)
+      const last = lastKey(state, null)
+      newItem.setSortOrder(keyBetween(last, null))
       newItem.setParentId(null)
     } else {
       const ref = state.getItem(referenceId)
       if (!ref) throw new Error(`insertBelow: reference item ${referenceId} not found`)
       const siblings = state.getChildren(ref.parentId)
       const refIndex = siblings.findIndex((s) => s.id === referenceId)
-      // Bump sortOrders of items after the reference
-      for (let i = refIndex + 1; i < siblings.length; i++) {
-        siblings[i].setSortOrder(siblings[i].sortOrder + 1)
-      }
+      const nextKey = refIndex < siblings.length - 1
+        ? siblings[refIndex + 1].sortOrder as SortOrderIndex
+        : null
       newItem.setParentId(ref.parentId)
-      newItem.setSortOrder(ref.sortOrder + 1)
+      newItem.setSortOrder(keyBetween(ref.sortOrder as SortOrderIndex, nextKey))
     }
 
     state.items.set(id, newItem)
@@ -114,26 +129,20 @@ export function insertAbove(
     const newItem = new OutlineItem({ id })
 
     if (!referenceId) {
-      const rootChildren = state.getChildren(null)
-      // Bump all root items
-      for (const child of rootChildren) {
-        child.setSortOrder(child.sortOrder + 1)
-      }
+      // Insert as first root child
+      const first = firstKey(state, null)
       newItem.setParentId(null)
-      newItem.setSortOrder(0)
+      newItem.setSortOrder(keyBetween(null, first))
     } else {
       const ref = state.getItem(referenceId)
       if (!ref) throw new Error(`insertAbove: reference item ${referenceId} not found`)
-      const refOrder = ref.sortOrder // capture before bumping
       const siblings = state.getChildren(ref.parentId)
-      // Bump sortOrders of items at and after the reference
-      for (const s of siblings) {
-        if (s.sortOrder >= refOrder) {
-          s.setSortOrder(s.sortOrder + 1)
-        }
-      }
+      const refIndex = siblings.findIndex((s) => s.id === referenceId)
+      const prevKey = refIndex > 0
+        ? siblings[refIndex - 1].sortOrder as SortOrderIndex
+        : null
       newItem.setParentId(ref.parentId)
-      newItem.setSortOrder(refOrder)
+      newItem.setSortOrder(keyBetween(prevKey, ref.sortOrder as SortOrderIndex))
     }
 
     state.items.set(id, newItem)
@@ -230,10 +239,10 @@ export function indentItem(state: AppState, um: UndoManager, itemId: string) {
     if (idx <= 0) return // Can't indent first child
 
     const newParent = siblings[idx - 1]
-    const newSiblings = state.getChildren(newParent.id)
+    // Place as last child of new parent
+    const last = lastKey(state, newParent.id)
     item.setParentId(newParent.id)
-    item.setSortOrder(newSiblings.length)
-    renumberChildren(state, siblings[0]?.parentId ?? null) // fix old parent
+    item.setSortOrder(keyBetween(last, null))
   })
 }
 
@@ -256,24 +265,26 @@ export function outdentItem(state: AppState, um: UndoManager, itemId: string) {
 
     // Re-parent subsequent siblings as children of the outdented item
     const existingChildren = state.getChildren(itemId)
-    let nextSort = existingChildren.length
+    let prevChildKey = existingChildren.length > 0
+      ? existingChildren[existingChildren.length - 1].sortOrder as SortOrderIndex
+      : null
     for (let i = itemIdx + 1; i < oldSiblings.length; i++) {
+      const newKey = keyBetween(prevChildKey, null)
       oldSiblings[i].setParentId(itemId)
-      oldSiblings[i].setSortOrder(nextSort++)
+      oldSiblings[i].setSortOrder(newKey)
+      prevChildKey = newKey as SortOrderIndex
     }
 
     const grandparentId = parent.parentId
     const parentSiblings = state.getChildren(grandparentId)
     const parentIdx = parentSiblings.findIndex((s) => s.id === parent.id)
 
-    // Bump items after parent in grandparent's children
-    for (let i = parentIdx + 1; i < parentSiblings.length; i++) {
-      parentSiblings[i].setSortOrder(parentSiblings[i].sortOrder + 1)
-    }
-
+    // Place outdented item right after its old parent in grandparent's children
+    const nextKey = parentIdx < parentSiblings.length - 1
+      ? parentSiblings[parentIdx + 1].sortOrder as SortOrderIndex
+      : null
     item.setParentId(grandparentId)
-    item.setSortOrder(parent.sortOrder + 1)
-    renumberChildren(state, oldParentId) // fix old parent
+    item.setSortOrder(keyBetween(parent.sortOrder as SortOrderIndex, nextKey))
   })
 }
 
@@ -288,6 +299,7 @@ export function moveItemUp(state: AppState, um: UndoManager, itemId: string) {
     const idx = siblings.findIndex((s) => s.id === itemId)
     if (idx <= 0) return
 
+    // Swap sort orders between item and its previous sibling
     const above = siblings[idx - 1]
     const aboveOrder = above.sortOrder
     above.setSortOrder(item.sortOrder)
@@ -306,6 +318,7 @@ export function moveItemDown(state: AppState, um: UndoManager, itemId: string) {
     const idx = siblings.findIndex((s) => s.id === itemId)
     if (idx < 0 || idx >= siblings.length - 1) return
 
+    // Swap sort orders between item and its next sibling
     const below = siblings[idx + 1]
     const belowOrder = below.sortOrder
     below.setSortOrder(item.sortOrder)

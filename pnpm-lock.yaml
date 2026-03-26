@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      fraci:
+        specifier: 0.18.0
+        version: 0.18.0
       idb:
         specifier: 8.0.3
         version: 8.0.3
@@ -470,6 +473,17 @@ packages:
       picomatch: ^3 || ^4
     peerDependenciesMeta:
       picomatch:
+        optional: true
+
+  fraci@0.18.0:
+    resolution: {integrity: sha512-Urp1cA4I3qyPr8M2MmEibr6Dk1Ak2nxSnf6NJbr+BzLMlbub9RvsaD+P2ed2gG7g/2fY7u00kfx/UVqR91vxLA==}
+    peerDependencies:
+      '@prisma/client': ^5.0.0 || ^6.0.0
+      drizzle-orm: '>= 0.30.0 < 0.45.0'
+    peerDependenciesMeta:
+      '@prisma/client':
+        optional: true
+      drizzle-orm:
         optional: true
 
   fsevents@2.3.3:
@@ -1177,6 +1191,8 @@ snapshots:
   fdir@6.5.0(picomatch@4.0.4):
     optionalDependencies:
       picomatch: 4.0.4
+
+  fraci@0.18.0: {}
 
   fsevents@2.3.3:
     optional: true
