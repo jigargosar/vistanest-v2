@@ -5,7 +5,6 @@ import {
   createAppState,
   insertBelow,
   setContent,
-  _resetIdCounter,
 } from '../core/api'
 import { OutlineProvider } from './context'
 import { useKeyboardHandler } from './useKeyboardHandler'
@@ -41,7 +40,6 @@ function seedThree() {
 }
 
 beforeEach(() => {
-  _resetIdCounter()
   const ctx = createAppState()
   state = ctx.state
   um = ctx.undoManager
@@ -53,20 +51,20 @@ describe('useKeyboardHandler — navigation mode', () => {
   afterEach(() => cleanup?.unmount())
 
   it('j / ArrowDown moves cursor down', () => {
-    const { id2 } = seedThree()
+    const { id2, id3 } = seedThree()
     cleanup = renderHandler()
     fire('j')
     expect(state.cursorItemId).toBe(id2)
     fire('ArrowDown')
-    expect(state.cursorItemId).toBe('item-3')
+    expect(state.cursorItemId).toBe(id3)
   })
 
   it('k / ArrowUp moves cursor up', () => {
-    const { id1, id3 } = seedThree()
+    const { id1, id2, id3 } = seedThree()
     state.setCursor(id3)
     cleanup = renderHandler()
     fire('k')
-    expect(state.cursorItemId).toBe('item-2')
+    expect(state.cursorItemId).toBe(id2)
     fire('ArrowUp')
     expect(state.cursorItemId).toBe(id1)
   })
@@ -75,11 +73,12 @@ describe('useKeyboardHandler — navigation mode', () => {
     seedThree()
     cleanup = renderHandler()
     fire('o')
-    // New item should be created (item-4) after item-1
-    expect(state.cursorItemId).toBe('item-4')
-    expect(state.editingItemId).toBe('item-4')
+    // New item should be created after cursor (id1)
+    const newId = state.cursorItemId!
+    expect(newId).toBeTruthy()
+    expect(state.editingItemId).toBe(newId)
     // The new item exists in the store
-    const newItem = state.getItem('item-4')
+    const newItem = state.getItem(newId)
     expect(newItem).toBeTruthy()
   })
 
@@ -87,22 +86,23 @@ describe('useKeyboardHandler — navigation mode', () => {
     const { id1: firstId } = seedThree()
     cleanup = renderHandler()
     fire('O', { shiftKey: true })
-    expect(state.cursorItemId).toBe('item-4')
-    expect(state.editingItemId).toBe('item-4')
+    const newId = state.cursorItemId!
+    expect(newId).toBeTruthy()
+    expect(state.editingItemId).toBe(newId)
     // Verify it's above id1 in visible order
     const visible = state.getVisibleItems()
-    const newIdx = visible.findIndex((v) => v.id === 'item-4')
+    const newIdx = visible.findIndex((v) => v.id === newId)
     const origIdx = visible.findIndex((v) => v.id === firstId)
     expect(newIdx).toBeLessThan(origIdx)
   })
 
   it('Tab indents, Shift+Tab outdents', () => {
-    const { id2 } = seedThree()
+    const { id1, id2 } = seedThree()
     state.setCursor(id2)
     cleanup = renderHandler()
     fire('Tab')
     const item2 = state.getItem(id2)!
-    expect(item2.parentId).toBe('item-1') // indented under item-1
+    expect(item2.parentId).toBe(id1) // indented under id1
 
     fire('Tab', { shiftKey: true })
     expect(state.getItem(id2)!.parentId).toBeNull() // back to root
@@ -142,11 +142,11 @@ describe('useKeyboardHandler — navigation mode', () => {
   })
 
   it('Enter starts editing', () => {
-    seedThree()
+    const { id1 } = seedThree()
     cleanup = renderHandler()
     expect(state.editingItemId).toBeNull()
     fire('Enter')
-    expect(state.editingItemId).toBe('item-1')
+    expect(state.editingItemId).toBe(id1)
   })
 
   it('Ctrl+z undoes, Ctrl+Shift+z redoes', () => {
@@ -204,3 +204,4 @@ describe('useKeyboardHandler — navigation mode', () => {
     expect(state.cursorItemId).toBe(before)
   })
 })
+

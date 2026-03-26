@@ -17,7 +17,6 @@ import {
   moveCursorDown,
   undo,
   redo,
-  _resetIdCounter,
 } from './api'
 import type { AppState } from './model'
 import type { UndoManager } from 'mobx-keystone'
@@ -26,7 +25,6 @@ let state: AppState
 let um: UndoManager
 
 beforeEach(() => {
-  _resetIdCounter()
   const result = createAppState()
   state = result.state
   um = result.undoManager
@@ -44,7 +42,7 @@ describe('createAppState', () => {
 describe('CRUD - insertBelow', () => {
   it('creates first root item when state is empty', () => {
     const id = insertBelow(state, um)
-    expect(id).toBe('item-1')
+    expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
     expect(state.getItem(id)).toBeDefined()
     expect(state.getItem(id)!.parentId).toBeNull()
     expect(state.cursorItemId).toBe(id)

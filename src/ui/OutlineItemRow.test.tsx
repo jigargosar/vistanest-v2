@@ -6,7 +6,6 @@ import {
   insertBelow,
   setContent,
   startEditing,
-  _resetIdCounter,
 } from '../core/api'
 import { OutlineProvider } from './context'
 import { OutlineItemRow } from './OutlineItemRow'
@@ -28,7 +27,6 @@ function renderRow(itemId: string) {
 }
 
 beforeEach(() => {
-  _resetIdCounter()
   const ctx = createAppState()
   state = ctx.state
   um = ctx.undoManager

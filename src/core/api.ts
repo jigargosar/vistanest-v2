@@ -36,15 +36,9 @@ export function setupUndo(state: AppState): UndoManager {
 // Helpers
 // ---------------------------------------------------------------------------
 
-let _nextId = 1
-/** Generate a unique ID for new items. Deterministic in tests. */
+/** Generate a unique ID for new items. Uses crypto.randomUUID() for collision-free IDs across sessions. */
 export function generateId(): string {
-  return `item-${_nextId++}`
-}
-
-/** Reset ID counter — for tests only. */
-export function _resetIdCounter() {
-  _nextId = 1
+  return crypto.randomUUID()
 }
 
 /**
