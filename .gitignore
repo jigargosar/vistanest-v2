@@ -29,8 +29,13 @@ elm-stuff
 # Background shell
 .bg-shell
 
-# ── GSD baseline (auto-generated) ──
-.gsd
+# ── GSD runtime (not tracked) ──
+.gsd/runtime/
+.gsd/activity/
+.gsd/worktrees/
+.gsd/browser-state/
+.gsd/gsd.db
+.gsd/gsd.db-journal
 *.swp
 *.swo
 *~

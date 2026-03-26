@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T02",
+  "unitId": "M001/S01/T02",
+  "timestamp": 1774492631928,
+  "passed": true,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "npx vitest run src/core/api.test.ts --reporter=verbose",
+      "exitCode": 0,
+      "durationMs": 2343,
+      "verdict": "pass"
+    }
+  ]
+}

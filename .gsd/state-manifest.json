@@ -1,0 +1,1127 @@
+{
+  "version": 1,
+  "exported_at": "2026-03-26T03:42:51.495Z",
+  "milestones": [
+    {
+      "id": "M001",
+      "title": "M001: Core Outliner",
+      "status": "complete",
+      "depends_on": [],
+      "created_at": "2026-03-26T02:20:39.724Z",
+      "completed_at": "2026-03-26T03:42:51.185Z",
+      "vision": "A working keyboard-driven outliner with tree operations, undo/redo, soft-delete, visual design matching the spec, IndexedDB persistence, and JSON export — enough to try on one device and give feedback.",
+      "success_criteria": [
+        "User can create, edit, rearrange, collapse, complete, and archive outline items entirely via keyboard",
+        "Undo/redo works for all operations with cursor position restored",
+        "Visual design matches the spec — dark theme, amber accent, IBM Plex Sans / Space Grotesk / JetBrains Mono, topbar, status bar",
+        "Data persists across page refresh via IndexedDB",
+        "JSON export downloads a valid file containing the full outline data",
+        "Core API has comprehensive test coverage for all tree operations and edge cases"
+      ],
+      "key_risks": [
+        {
+          "risk": "MobX Keystone undoMiddleware cursor restore may have edge cases with attached state",
+          "whyItMatters": "Undo/redo is a core promise — if cursor restore is flaky, the keyboard-driven experience breaks"
+        },
+        {
+          "risk": "Keystone single-parent rule complicates tree manipulation (indent/outdent/move)",
+          "whyItMatters": "Every tree operation needs detach-before-reinsert — subtle ordering bugs could corrupt the tree"
+        },
+        {
+          "risk": "Soft-delete interaction with undo — archiving then undoing must restore seamlessly",
+          "whyItMatters": "Two data safety mechanisms (undo + archive) must compose correctly or the user loses trust"
+        }
+      ],
+      "proof_strategy": [
+        {
+          "riskOrUnknown": "Keystone undo with cursor restore",
+          "retireIn": "S01",
+          "whatWillBeProven": "Undo/redo tests pass with cursor position verified before and after each operation"
+        },
+        {
+          "riskOrUnknown": "Single-parent tree manipulation",
+          "retireIn": "S01",
+          "whatWillBeProven": "Indent/outdent/move tests pass including edge cases — detach/reinsert pattern works correctly"
+        },
+        {
+          "riskOrUnknown": "Soft-delete + undo composition",
+          "retireIn": "S01",
+          "whatWillBeProven": "Archive then undo test restores item to correct position with correct state"
+        }
+      ],
+      "verification_contract": "Core API tests pass for all tree operations: CRUD, indent/outdent, move up/down, collapse/expand, complete toggle, archive, undo/redo with cursor restore. Edge cases covered: first/last item, single item, deeply nested.",
+      "verification_integration": "Keyboard events dispatch to correct core API functions. UI renders correct state after each operation. Edit mode transitions work (Enter to edit, Esc to exit, Enter in edit creates new item).",
+      "verification_operational": "IndexedDB auto-save persists state. Page refresh restores full state. JSON export produces valid downloadable file.",
+      "verification_uat": "User can build a multi-level outline with 10+ items across 3+ levels using only keyboard, rearrange items, complete some, archive some, undo/redo, refresh the page, and find all data intact. Visual design matches the spec.",
+      "definition_of_done": [
+        "All core API tests pass",
+        "Keyboard navigation works for all mapped keys (j/k, o/O, Tab, Space, h/l, Enter, Esc, Backspace, Ctrl+Z, Ctrl+Shift+Z, Ctrl+Up, Ctrl+Down)",
+        "Inline editing works — Enter to edit, Esc to exit, Enter in edit creates new item",
+        "Visual design matches spec — dark theme, amber accent, correct fonts, topbar, status bar, styled items",
+        "Data persists across page refresh via IndexedDB",
+        "JSON export downloads valid file",
+        "Undo/redo works for all operations with cursor position restored",
+        "Archive (soft-delete) works and archived items are excluded from visible tree",
+        "Pre-populated demo list appears on first use",
+        "pnpm build succeeds with no errors",
+        "pnpm typecheck passes"
+      ],
+      "requirement_coverage": "Covers: R001, R002, R003, R004, R005, R006, R007, R008, R009, R010, R011, R012, R013\\nPartially covers: none\\nLeaves for later: R020-R026 (deferred to M002)\\nOrphan risks: none",
+      "boundary_map_markdown": "### S01 → S02\n\nProduces:\n- `src/core/model.ts` → OutlineItem, AppState Keystone models with all properties (id, content, note, isCompleted, isArchived, children, cursorItemId, collapsedIds, editingItemId)\n- `src/core/api.ts` → createAppState(), insertBelow(), insertAbove(), deleteItem() (archive), moveCursorUp(), moveCursorDown(), indentItem(), outdentItem(), moveItemUp(), moveItemDown(), toggleCollapse(), toggleComplete(), setContent(), startEditing(), stopEditing(), getVisibleItems(), undo(), redo()\n- `src/core/api.ts` → registered root store with undoMiddleware\n\nConsumes: nothing (first slice)\n\n### S01 → S03\n\nProduces:\n- `src/core/model.ts` → OutlineItem, AppState models (for observer rendering)\n- `src/core/api.ts` → getVisibleItems() for rendering the item tree\n\nConsumes: nothing (first slice)\n\n### S02 → S03\n\nProduces:\n- `src/ui/App.tsx` → working App component with keyboard handler, state initialization, observer wiring\n- `src/ui/OutlineView.tsx` → outline tree renderer (unstyled functional version)\n- `src/ui/OutlineItem.tsx` → single item row with edit/view states (unstyled functional version)\n\nConsumes from S01:\n- `src/core/api.ts` → all core API functions for keyboard dispatch\n- `src/core/model.ts` → AppState, OutlineItem for observer rendering\n\n### S02 → S04\n\nProduces:\n- `src/ui/App.tsx` → initialized AppState root store (for persistence to hook into)\n\nConsumes from S01:\n- `src/core/api.ts` → createAppState()\n\n### S03 → S04\n\nProduces:\n- `src/ui/App.tsx` → complete styled app with topbar, status bar (persistence wires into this)\n\nConsumes from S01:\n- `src/core/model.ts` → models for observer rendering\nConsumes from S02:\n- `src/ui/App.tsx` → working app shell to style"
+    }
+  ],
+  "slices": [
+    {
+      "milestone_id": "M001",
+      "id": "S01",
+      "title": "Keystone Model + Core API",
+      "status": "complete",
+      "risk": "high",
+      "depends": [],
+      "demo": "After this: all tree operations work in tests — CRUD, indent/outdent, move, collapse, complete, archive, undo/redo with cursor restore. The riskiest technical unknowns (Keystone undo, single-parent tree ops, archive+undo composition) are proven.",
+      "created_at": "2026-03-26T02:21:33.496Z",
+      "completed_at": "2026-03-26T02:48:54.330Z",
+      "full_summary_md": "---\nid: S01\nparent: M001\nmilestone: M001\nprovides:\n  - Core data model: OutlineItem and AppState Keystone models\n  - Complete API: 15+ functions covering CRUD, tree ops, navigation, editing, undo/redo\n  - Proven undo/redo with cursor restore via attachedState middleware\n  - Fractional indexing (fraci) for sortOrder\n  - 57 passing tests as regression safety net\nrequires:\n  []\naffects:\n  - S02\n  - S03\n  - S04\nkey_files:\n  - src/core/model.ts\n  - src/core/api.ts\n  - src/core/api.test.ts\nkey_decisions:\n  - Flat ObjectMap with parentId/sortOrder instead of nested children array (D003)\n  - Cascading archive to all descendants (D004)\n  - Outdent re-parents subsequent siblings as children of outdented item (D005)\n  - fraci fractional indexing for sortOrder (D006)\n  - All API functions use (state, um, ...args) signature for uniform undo grouping\n  - toggleCollapse allowed on leaf nodes\npatterns_established:\n  - API function signature: (state, um, ...args) with um.withGroup() wrapping\n  - Cursor/editing restore via attachedState in undo middleware\n  - fraci sortOrder: stored as string in model, cast to branded FractionalIndex at API boundaries\n  - Test pattern: createAppState() + resetIdCounter() in beforeEach for determinism\nobservability_surfaces:\n  - none\ndrill_down_paths:\n  - .gsd/milestones/M001/slices/S01/tasks/T01-SUMMARY.md\n  - .gsd/milestones/M001/slices/S01/tasks/T02-SUMMARY.md\n  - .gsd/milestones/M001/slices/S01/tasks/T03-SUMMARY.md\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-26T02:48:54.335Z\nblocker_discovered: false\n---\n\n# S01: Keystone Model + Core API\n\n**Built complete outliner data model and API with 57 passing tests — CRUD, indent/outdent, move, collapse, complete, archive, undo/redo with cursor restore, all on fraci fractional indexing.**\n\n## What Happened\n\nT01 built the foundation: OutlineItem model (id, content, parentId, sortOrder, isCompleted, isCollapsed, isArchived, note) and AppState model (title, items ObjectMap, cursorItemId, editingItemId) with query methods. Full API landed with 15+ functions covering CRUD, tree ops, navigation, editing, and undo/redo. All operations wrap in um.withGroup() for atomic undo. 13 tests validated CRUD and editing. A sortOrder mutation-ordering bug in insertAbove was caught and fixed.\n\nT02 added 29 tests for the riskiest operations: indent (6), outdent (5), move (4), cursor navigation (8), toggles (4), deep collapse (1), sort order stability (1). Outdent tests exposed missing sibling re-parenting — fixed to match standard outliner behavior (WorkFlowy/Dynalist pattern).\n\nT03 added 15 undo/redo tests covering every operation type plus a large integration workflow test. Migrated sortOrder from sequential integers to fraci fractional indexing, eliminating renumberChildren and making ordering insert-only. All 57 tests pass with clean typecheck.\n\n## Verification\n\npnpm typecheck — 0 type errors (exit 0). pnpm test — 57/57 tests pass (exit 0). Test coverage spans CRUD (7), editing (2), indent (6), outdent (5), move (4), cursor navigation (8), toggles (4), deep collapse (1), sort order stability (1), undo/redo (14), integration workflow (1), additional edge cases (4).\n\n## Requirements Advanced\n\n- R001 — Validated — 57 passing tests prove CRUD on tree structure\n- R002 — Validated — 15 tests prove indent/outdent/move with undo\n- R005 — Validated — 14 undo/redo tests prove cursor restore for all ops\n- R011 — Validated — collapse/expand proven with navigation and deep nesting\n- R012 — Validated — toggleComplete proven with undo\n- R013 — Validated — archive with cascade and full undo restore proven\n\n## Requirements Validated\n\n- R001 — 57 passing tests prove CRUD operations\n- R002 — 15 tests prove indent/outdent/move\n- R005 — 14 undo/redo tests with cursor restore\n- R011 — Collapse/expand with navigation tests\n- R012 — toggleComplete with undo tests\n- R013 — archiveItem cascade + undo restore tests\n\n## New Requirements Surfaced\n\nNone.\n\n## Requirements Invalidated or Re-scoped\n\nNone.\n\n## Deviations\n\nFixed insertAbove sortOrder computation (mutation-ordering bug) in T01. Fixed outdentItem to re-parent subsequent siblings in T02. Migrated sortOrder from integer to fraci fractional indexing in T03 (user-requested).\n\n## Known Limitations\n\ngetChildren/getVisibleItems are O(n) scans — fine for hundreds of items, would need indexing for thousands. No persistence layer yet (S04). No UI integration (S02).\n\n## Follow-ups\n\nNone.\n\n## Files Created/Modified\n\n- `src/core/model.ts` — OutlineItem and AppState Keystone models with all fields, setters, and query methods\n- `src/core/api.ts` — Complete API: createAppState, setupUndo, CRUD, tree ops, navigation, editing, undo/redo\n- `src/core/api.test.ts` — 57 tests covering all operations, edge cases, undo/redo, and integration workflow\n",
+      "full_uat_md": "# S01: Keystone Model + Core API — UAT\n\n**Milestone:** M001\n**Written:** 2026-03-26T02:48:54.335Z\n\n# S01: Keystone Model + Core API — UAT\n\n**Milestone:** M001\n**Written:** 2026-03-26\n\n## UAT Type\n\n- UAT mode: artifact-driven\n- Why this mode is sufficient: S01 is a pure model/API slice with no UI — all behavior is exercised through unit tests against the API surface.\n\n## Preconditions\n\n- Node.js 18+ and pnpm installed\n- Dependencies installed (`pnpm install`)\n\n## Smoke Test\n\nRun `pnpm test` — all 57 tests should pass in under 5 seconds.\n\n## Test Cases\n\n### 1. CRUD Operations\nRun `pnpm test -- --reporter=verbose` — 7 CRUD tests pass (create, insertBelow/Above, archive cascade, setContent).\n\n### 2. Tree Manipulation\n15 tests pass for indent (6), outdent with sibling re-parenting (5), moveUp/moveDown (4).\n\n### 3. Cursor Navigation\n8 tests pass — DFS traversal, collapsed subtree skipping, archived item skipping, boundary no-ops.\n\n### 4. Undo/Redo\n14 tests pass — every operation type undoes/redoes with cursor restore, LIFO ordering, compound atomicity.\n\n### 5. Integration Workflow\n1 test exercises realistic session: create 5 items, build hierarchy, collapse/expand, complete, archive+undo, move, multi-undo/redo.\n\n### 6. Type Safety\n`pnpm typecheck` exits 0 with no errors.\n\n## Edge Cases\n\n### Indent When Previous Sibling Is Collapsed\nItem becomes child of collapsed sibling — collapse doesn't prevent indent.\n\n### Outdent With Subsequent Siblings\nSubsequent siblings become children of outdented item (standard outliner behavior).\n\n### Archive With Deep Subtree\nAll descendants get isArchived=true. Undo restores all.\n\n## Failure Signals\n\n- Any test failure in `pnpm test`\n- Type errors from `pnpm typecheck`\n\n## Not Proven By This UAT\n\n- UI rendering (S02), keyboard handling (S02), visual design (S03), persistence (S04), performance at scale\n",
+      "goal": "All tree operations work in tests — CRUD, indent/outdent, move, collapse, complete, archive, undo/redo with cursor restore. The core model and API are proven and ready for UI integration.",
+      "success_criteria": "- `pnpm typecheck` passes with zero errors\n- `pnpm test` passes with 30+ tests covering every core API function\n- `npx vitest run src/core/api.test.ts --reporter=verbose` shows all tests passing\n- Every requirement owned by S01 (R001, R002, R005, R011, R012, R013) has test coverage\n- Archive cascades to descendants\n- Undo/redo restores cursor position for every operation",
+      "proof_level": "Contract — all behavior proven via unit/integration tests. No browser or runtime needed.",
+      "integration_closure": "- Upstream surfaces consumed: none (first slice)\n- New wiring introduced: `src/core/model.ts` (Keystone models), `src/core/api.ts` (core API functions) — exported for UI layer in S02\n- What remains: S02 wires API to keyboard handlers + React, S03 styles, S04 persists",
+      "observability_impact": "None — pure logic layer with no runtime, async, or I/O boundaries. Failures are caught entirely by test assertions.",
+      "sequence": 0,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M001",
+      "id": "S02",
+      "title": "Keyboard-Driven Interaction",
+      "status": "complete",
+      "risk": "high",
+      "depends": [
+        "S01"
+      ],
+      "demo": "After this: user can navigate with j/k, insert items with o/O, edit inline with Enter/Esc, indent with Tab, complete with Space, archive with Backspace on empty, undo with Ctrl+Z — all in the browser. UI is functional but unstyled.",
+      "created_at": "2026-03-26T02:21:33.496Z",
+      "completed_at": "2026-03-26T03:08:08.098Z",
+      "full_summary_md": "---\nid: S02\nparent: M001\nmilestone: M001\nprovides:\n  - React ↔ MobX observer rendering pipeline (OutlineProvider, OutlineView, OutlineItemRow)\n  - Document-level keyboard handler with 16 navigation-mode shortcuts\n  - Inline edit mode with Enter/Esc/blur commit flow\n  - getDepth() utility for tree depth computation\nrequires:\n  - slice: S01\n    provides: Core API (insertBelow, insertAbove, indentItem, outdentItem, moveItemUp, moveItemDown, toggleComplete, toggleCollapse, archiveItem, setContent, startEditing, stopEditing, moveCursorUp, moveCursorDown, undo, redo) and AppState/UndoManager models\naffects:\n  - S03\n  - S04\nkey_files:\n  - src/ui/context.ts\n  - src/ui/OutlineView.tsx\n  - src/ui/OutlineItemRow.tsx\n  - src/ui/OutlineItemRow.test.tsx\n  - src/ui/useKeyboardHandler.ts\n  - src/ui/useKeyboardHandler.test.tsx\n  - src/ui/KeyboardHandlerHost.tsx\n  - src/ui/App.tsx\n  - src/core/model.ts\nkey_decisions:\n  - React context (not prop drilling) for AppState/UndoManager distribution\n  - Flat list rendering via getVisibleItems() map — no recursive component tree\n  - KeyboardHandlerHost wrapper component to bridge context provider and keyboard hook\n  - Ref callback (not useEffect) for auto-focus in edit mode\n  - Double-commit guard on blur to prevent stale content writes after Escape/Enter\npatterns_established:\n  - All UI components reading MobX state are observer()-wrapped via mobx-react-lite\n  - Single document-level keyboard listener with centralized dispatch — not per-component\n  - Edit-mode detection via editingItemId — handler bails early when non-null\nobservability_surfaces:\n  - none\ndrill_down_paths:\n  - .gsd/milestones/M001/slices/S02/tasks/T01-SUMMARY.md\n  - .gsd/milestones/M001/slices/S02/tasks/T02-SUMMARY.md\n  - .gsd/milestones/M001/slices/S02/tasks/T03-SUMMARY.md\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-26T03:08:08.101Z\nblocker_discovered: false\n---\n\n# S02: Keyboard-Driven Interaction\n\n**Full keyboard-driven outliner interaction — navigation, insertion, editing, tree manipulation, and undo — wired to reactive MobX rendering in the browser**\n\n## What Happened\n\nThree tasks built the complete keyboard interaction layer on top of S01's core API. T01 created the React ↔ MobX wiring: OutlineProvider context, OutlineView observer rendering getVisibleItems() as a flat list, and OutlineItemRow with depth-based indentation, cursor highlight, collapse chevrons, and completion checkboxes. Added getDepth() to AppState. T02 built useKeyboardHandler — a document-level keydown listener dispatching 16 navigation-mode shortcuts, with a KeyboardHandlerHost wrapper to bridge context. T03 added inline edit mode to OutlineItemRow with Enter/Esc/blur commit paths, auto-focus via ref callback, and a double-commit guard on blur.\n\n## Verification\n\nTypecheck (tsc --noEmit) clean. 81 tests pass: 60 core API + 3 getDepth + 14 keyboard handler + 7 edit mode. All 16 keyboard shortcuts tested. Edit-mode passthrough, null-cursor guard, and listener cleanup verified.\n\n## Requirements Advanced\n\n- R003 — All 16 keyboard shortcuts functional with 14 tests proving navigation, insertion, editing, tree ops, and undo/redo\n- R004 — Inline editing with Enter/Esc/blur commit flow proven with 7 tests covering all commit paths and auto-focus\n\n## Requirements Validated\n\n- R003 — 14 keyboard handler tests prove all 16 navigation-mode shortcuts: j/k cursor, o/O insert+edit, Tab/Shift+Tab indent/outdent, Space complete, h/l collapse, Backspace archive-empty, Enter edit, Ctrl+Z/Shift+Z undo/redo, Ctrl+Arrow reorder. Edit-mode passthrough verified.\n- R004 — 7 edit-mode tests prove Enter/Esc/blur commit paths, auto-focus, content persistence via setContent, Enter-in-edit creates new item below in edit mode, and double-commit guard prevents stale commits on blur.\n\n## New Requirements Surfaced\n\nNone.\n\n## Requirements Invalidated or Re-scoped\n\nNone.\n\n## Deviations\n\nAdded KeyboardHandlerHost.tsx wrapper component (T02) — not in original plan but required because useKeyboardHandler needs to call useAppState() inside OutlineProvider context. Standard React context pattern, no architectural impact.\n\n## Known Limitations\n\nUI is functional but completely unstyled (S03 handles visual design). No persistence — refreshing resets data (S04 handles IndexedDB). Keyboard shortcuts are hardcoded — no user customization.\n\n## Follow-ups\n\nNone — S03 and S04 are already planned and cover the known gaps.\n\n## Files Created/Modified\n\n- `src/core/model.ts` — Added getDepth() method to AppState for computing item nesting depth\n- `src/ui/context.ts` — React context provider and useAppState() hook for AppState/UndoManager\n- `src/ui/OutlineView.tsx` — Observer component rendering getVisibleItems() as flat list\n- `src/ui/OutlineItemRow.tsx` — Observer component for items with depth indentation, cursor highlight, collapse chevron, checkbox, and inline edit mode\n- `src/ui/OutlineItemRow.test.tsx` — 7 tests for edit mode commit paths\n- `src/ui/useKeyboardHandler.ts` — Custom hook with document-level keydown listener for 16 shortcuts\n- `src/ui/useKeyboardHandler.test.tsx` — 14 tests for all keyboard shortcuts\n- `src/ui/KeyboardHandlerHost.tsx` — Wrapper component bridging context provider and keyboard hook\n- `src/ui/App.tsx` — Bootstraps state, seeds items, provides context, renders KeyboardHandlerHost\n",
+      "full_uat_md": "# S02: Keyboard-Driven Interaction — UAT\n\n**Milestone:** M001\n**Written:** 2026-03-26T03:08:08.102Z\n\n# S02: Keyboard-Driven Interaction — UAT\n\n**Milestone:** M001\n**Written:** 2026-03-26\n\n## UAT Type\n\n- UAT mode: mixed (artifact-driven test suite + live-runtime browser verification)\n- Why this mode is sufficient: 81 automated tests prove all keyboard shortcuts and edit-mode flows work correctly. Live browser verification confirms the reactive rendering pipeline and keyboard interaction work end-to-end.\n\n## Preconditions\n\n- Run `pnpm dev` — Vite dev server must be running at localhost:5173\n- Browser open to the app URL\n- App should show 3 seeded items\n\n## Smoke Test\n\nOpen app, confirm 3 items visible with first highlighted. Press j — cursor moves down. Press k — cursor moves up.\n\n## Test Cases\n\n### 1. Cursor Navigation (j/k)\n1. Load the app — cursor on first item\n2. Press j three times\n3. **Expected:** Cursor moves down, stops at last item\n4. Press k three times\n5. **Expected:** Cursor moves back up, stops at first item\n\n### 2. Insert Below (o)\n1. Cursor on first item, press o\n2. **Expected:** New empty item below in edit mode with input focused\n3. Type \"New item\", press Escape\n4. **Expected:** Content saved, static text displayed\n\n### 3. Indent/Outdent (Tab/Shift+Tab)\n1. Cursor on non-first root item, press Tab\n2. **Expected:** Item indents, becomes child of item above\n3. Press Shift+Tab\n4. **Expected:** Item outdents back to root\n\n### 4. Toggle Complete (Space)\n1. Cursor on any item, press Space\n2. **Expected:** Completion indicator shown, page doesn't scroll\n3. Press Space again\n4. **Expected:** Completion removed\n\n### 5. Edit Mode — Enter/Escape\n1. Cursor on item, press Enter\n2. **Expected:** Editable input with existing text, auto-focused\n3. Modify text, press Escape\n4. **Expected:** Modified text saved\n\n### 6. Edit Mode — Enter Creates New Item\n1. In edit mode, press Enter\n2. **Expected:** Content saved, new item below in edit mode\n\n### 7. Undo/Redo (Ctrl+Z/Ctrl+Shift+Z)\n1. Create item with o, type text, Escape\n2. Press Ctrl+Z\n3. **Expected:** Item disappears\n4. Press Ctrl+Shift+Z\n5. **Expected:** Item reappears\n\n## Edge Cases\n\n### Cursor at boundaries\n1. First item, press k — nothing happens\n2. Last item, press j — nothing happens\n\n### Backspace only on empty items\n1. Cursor on item with content, press Backspace — nothing happens\n2. Cursor on empty item, press Backspace — item archived\n\n### Shortcuts don't fire in edit mode\n1. Enter edit mode, press j/k/o/Space\n2. **Expected:** Characters typed into input, shortcuts don't fire\n\n## Failure Signals\n- Key press with no visual change (MobX reactivity broken)\n- Console errors about observer or context\n- Browser scrolling on Space or tab-switching on Tab\n\n## Not Proven By This UAT\n- Visual design (S03)\n- Data persistence (S04)\n- Mouse/touch interaction\n- Large item count performance\n- Accessibility/ARIA\n",
+      "goal": "User can navigate and manipulate an outline entirely via keyboard in the browser — j/k cursor, o/O insert, Tab/Shift+Tab indent/outdent, Space complete, h/l collapse, Backspace archive, Ctrl+Z undo, Enter/Esc edit mode — with the UI rendering MobX state reactively.",
+      "success_criteria": "## Must-Haves\n\n- React app renders outline items from AppState via MobX observer, with cursor highlighting and depth-based indentation\n- Navigation-mode keyboard shortcuts (j/k, o/O, Tab, Shift+Tab, Space, h/l, Backspace, Ctrl+Z/Ctrl+Shift+Z, Ctrl+Arrow, Enter) map to the correct core API calls\n- Edit mode: Enter starts editing (shows input), typing fills it, Esc saves and exits, Enter in edit mode saves + inserts below + starts editing new item\n- Tab and Space are preventDefault'd in navigation mode to avoid browser defaults\n- All 57 existing core tests still pass\n- TypeScript compiles with 0 errors\n\n## Proof Level\n\n- This slice proves: integration (core API ↔ React UI ↔ keyboard events)\n- Real runtime required: yes (browser)\n- Human/UAT required: yes (interactive keyboard testing in browser)\n\n## Verification\n\n- `pnpm typecheck` exits 0 (zero type errors)\n- `pnpm test` exits 0 (all 57 existing tests pass — no regressions)\n- `pnpm dev` → browser at localhost:5173 shows outline items with cursor highlight\n- Keyboard interactions verified in browser: j/k moves cursor, o inserts below + enters edit, Enter starts edit, Esc saves, Tab indents, Space completes, Ctrl+Z undoes\n\n## Integration Closure\n\n- Upstream surfaces consumed: `src/core/model.ts` (AppState, OutlineItem), `src/core/api.ts` (all 15+ API functions, createAppState, setupUndo)\n- New wiring introduced: React context for AppState/UndoManager, document-level keydown listener, MobX observer components rendering AppState\n- What remains before milestone is truly usable end-to-end: S03 (visual design), S04 (persistence + export)",
+      "proof_level": "integration",
+      "integration_closure": "Upstream: src/core/model.ts (AppState, OutlineItem), src/core/api.ts (all API functions). New wiring: React context for state, document keydown listener, MobX observer components. Remaining: S03 (visual design), S04 (persistence + export).",
+      "observability_impact": "Runtime signals: MobX observable state changes drive React re-renders — cursor position, editing state, and item list are all observable. Inspection surfaces: React DevTools shows component tree; browser console can access state via window for debugging. Failure visibility: Keyboard handler logs to console.warn on unrecognized keys in dev mode; MobX strict mode errors surface untracked reads.",
+      "sequence": 0,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M001",
+      "id": "S03",
+      "title": "Visual Design + Layout",
+      "status": "complete",
+      "risk": "medium",
+      "depends": [
+        "S02"
+      ],
+      "demo": "After this: app matches the design spec — dark theme with amber accents, IBM Plex Sans / Space Grotesk / JetBrains Mono typography, topbar with logo and nav placeholders, status bar with mode and counts, styled item rows with selection highlighting and checkboxes.",
+      "created_at": "2026-03-26T02:21:33.496Z",
+      "completed_at": "2026-03-26T03:20:45.386Z",
+      "full_summary_md": "---\nid: S03\nparent: M001\nmilestone: M001\nprovides:\n  - Design system tokens available as Tailwind utilities\n  - Three-zone layout shell (fixed topbar, scrollable content, fixed status bar)\n  - Themed item rows with amber selection, SVG icons, edit input glow\nrequires:\n  - slice: S02\n    provides: Functional keyboard-driven outliner with OutlineItemRow, OutlineView, and App components\naffects:\n  - S04\nkey_files:\n  - src/global.css\n  - index.html\n  - src/ui/Topbar.tsx\n  - src/ui/StatusBar.tsx\n  - src/ui/App.tsx\n  - src/ui/OutlineItemRow.tsx\n  - src/ui/OutlineView.tsx\nkey_decisions:\n  - Used hex colors in @theme rather than oklch for exact design spec match\n  - z-20 for fixed bars — above content, below future modals\n  - StatusBar derives counts inline via items.values() iteration — no computed getters added to AppState\n  - border-l-2 with border-transparent on non-selected rows to prevent layout shift\n  - Inline SVG icons rather than an icon library dependency\npatterns_established:\n  - Tailwind v4 @theme tokens as single source of truth for design values\n  - Fixed topbar + scrollable content + fixed status bar three-zone layout\n  - border-transparent placeholder pattern to prevent layout shift on selection\nobservability_surfaces:\n  - StatusBar shows live mode indicator (NAVIGATE/EDIT) and item counts — runtime state diagnostic\ndrill_down_paths:\n  - .gsd/milestones/M001/slices/S03/tasks/T01-SUMMARY.md\n  - .gsd/milestones/M001/slices/S03/tasks/T02-SUMMARY.md\n  - .gsd/milestones/M001/slices/S03/tasks/T03-SUMMARY.md\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-26T03:20:45.397Z\nblocker_discovered: false\n---\n\n# S03: Visual Design + Layout\n\n**Dark theme with amber accents, three-zone layout (topbar/content/status bar), themed item rows with SVG icons and selection highlighting — app matches the design spec.**\n\n## What Happened\n\nThree tasks built up the visual layer in dependency order. T01 laid the design system foundation: Tailwind v4 @theme block in global.css with 8 color tokens and 3 font-family tokens, plus Google Fonts CDN links in index.html. T02 created Topbar.tsx (Space Grotesk amber logo, disabled search/nav placeholders, help button, avatar) and StatusBar.tsx (MobX observer showing NAVIGATE/EDIT mode, item counts, shortcut hints), then restructured App.tsx into the three-zone fixed-bar layout. T03 applied the full visual theme to OutlineItemRow (26px indent, 36px min height, amber border-l-2 selection, inline SVG chevrons and checkboxes, amber edit input glow) and OutlineView (font-body, centered 900px container). All changes were CSS/className-only — no behavioral modifications. One test assertion updated to match new edit input classes.\n\n## Verification\n\npnpm typecheck — 0 errors. pnpm test — 81/81 tests pass across 3 test files (api, keyboard handler, item row). Each task independently verified before proceeding.\n\n## Requirements Advanced\n\n- R006 — Full dark theme with amber accent, three font families, centered 900px layout — all spec requirements delivered\n- R009 — Fixed status bar with mode indicator, item counts, and contextual shortcut hints\n- R010 — Fixed topbar with logo, search placeholder, nav placeholders, help button, avatar\n\n## Requirements Validated\n\n- R006 — Design tokens match spec colors exactly. Three font families loaded via CDN. Centered 900px layout. Amber accents on selection, checkboxes, edit input. 81 tests pass.\n- R009 — StatusBar.tsx is MobX observer showing NAVIGATE/EDIT mode, non-archived count, completed count, shortcut hints. Fixed bottom with JetBrains Mono.\n- R010 — Topbar.tsx renders Space Grotesk amber logo, disabled search with / hint, disabled Due/Tags/Lists, help button, avatar. Fixed top.\n\n## New Requirements Surfaced\n\nNone.\n\n## Requirements Invalidated or Re-scoped\n\nNone.\n\n## Deviations\n\nOne test assertion in OutlineItemRow.test.tsx updated to match new themed edit input classes (border-none → border border-amber). Necessary mechanical change, not behavioral.\n\n## Known Limitations\n\nTopbar search and nav links are non-functional placeholders (by design for M001). Font loading depends on Google Fonts CDN with no offline fallback. StatusBar counts iterate all items on every render — fine for hundreds but would need optimization at scale.\n\n## Follow-ups\n\nNone.\n\n## Files Created/Modified\n\n- `src/global.css` — Added @theme block with 8 color tokens and 3 font-family tokens\n- `index.html` — Added Google Fonts CDN preconnect hints and stylesheet links\n- `src/ui/Topbar.tsx` — New component: fixed header with logo, search placeholder, nav placeholders\n- `src/ui/StatusBar.tsx` — New component: MobX observer showing mode, counts, shortcut hints\n- `src/ui/App.tsx` — Restructured to three-zone layout with fixed bars and padded content\n- `src/ui/OutlineItemRow.tsx` — Full design theme: amber selection, SVG icons, styled checkboxes, edit glow\n- `src/ui/OutlineView.tsx` — Body font, centered 900px container\n- `src/ui/OutlineItemRow.test.tsx` — Updated edit input class assertion to match new themed styles\n",
+      "full_uat_md": "# S03: Visual Design + Layout — UAT\n\n**Milestone:** M001\n**Written:** 2026-03-26T03:20:45.400Z\n\n# S03: Visual Design + Layout — UAT\n\n**Milestone:** M001\n**Written:** 2026-03-26\n\n## UAT Type\n\n- UAT mode: mixed (artifact-driven + live-runtime)\n- Why this mode is sufficient: Design/visual changes are best verified visually in a running app, but automated tests confirm no behavioral regressions.\n\n## Preconditions\n\n- `pnpm dev` running (Vite dev server at localhost:5173)\n- Browser with dev tools available\n- No cached/stale CSS — hard refresh if needed\n\n## Smoke Test\n\nOpen the app in a browser. Dark background (#0c0c0e), amber-accented topbar at top, status bar at bottom, styled outline items in center. If any are missing or page is white, the slice is broken.\n\n## Test Cases\n\n### 1. Design Tokens Applied\n1. Open the app in browser\n2. Inspect root element background → **Expected:** #0c0c0e dark\n3. Inspect item text font → **Expected:** IBM Plex Sans\n4. Inspect topbar logo → **Expected:** Space Grotesk, amber #e5a832\n\n### 2. Three-Zone Layout\n1. Scroll content area → **Expected:** Topbar and status bar stay fixed\n2. Content scrolls between bars without overlap\n3. Narrow browser window → **Expected:** Content stays centered\n\n### 3. Topbar Elements\n1. Logo \"VistaNest\" in amber Space Grotesk\n2. Search input with \"/\" hint — non-functional\n3. Disabled Due/Tags/Lists nav links\n4. Help button and avatar circle on right\n\n### 4. Status Bar — Mode\n1. No edit mode → **Expected:** \"NAVIGATE\"\n2. Enter to edit → **Expected:** \"EDIT\"\n3. Escape → **Expected:** \"NAVIGATE\"\n\n### 5. Status Bar — Counts\n1. Observe counts → **Expected:** total and completed shown\n2. Space to toggle complete → **Expected:** count updates\n3. Backspace on empty to archive → **Expected:** total decreases\n\n### 6. Item Selection\n1. j/k to move cursor → **Expected:** amber left border + tint on selected item\n2. No layout shift when selection changes\n\n### 7. SVG Chevrons\n1. Parent with children → **Expected:** SVG down chevron (not ▼)\n2. h to collapse → **Expected:** SVG right chevron (not ▶)\n\n### 8. Checkbox Styling\n1. Uncompleted item → **Expected:** styled checkbox outline (not ☐)\n2. Space to complete → **Expected:** amber filled checkbox, line-through text\n\n### 9. Edit Input\n1. Enter to edit → **Expected:** amber border + glow, body font, data-testid present\n\n### 10. Centered 900px Layout\n1. Wide window → **Expected:** content centered, max ~900px, padding on sides\n\n## Edge Cases\n\n### Empty state\n1. Archive all items → **Expected:** muted secondary text, not bright white\n\n### Scroll with many items\n1. 20+ items → **Expected:** bars fixed, content scrolls smoothly\n\n## Failure Signals\n- White background instead of dark\n- System font instead of IBM Plex Sans\n- Missing topbar or status bar\n- Content overlapping fixed bars\n- Text triangles or text checkboxes instead of SVG\n- Layout shift on cursor movement\n\n## Not Proven By This UAT\n- Topbar search functionality\n- Nav link functionality\n- Persistence of visual preferences\n- Accessibility compliance audit\n\n## Notes for Tester\n- Seeded data provides enough items for most scenarios\n- Font loading may take a moment on first visit\n- Topbar and status bar at z-20 — anything rendering above them is a bug\n",
+      "goal": "App matches the design spec — dark theme with amber accents, IBM Plex Sans / Space Grotesk / JetBrains Mono typography, topbar with logo and nav placeholders, status bar with mode and counts, styled item rows with selection highlighting and checkboxes. Centered ~900px single-column layout.",
+      "success_criteria": "## Must-Haves\n\n- Design tokens defined in `@theme` block: full color palette (bg, surface, border, text, amber accent shades), font-family tokens for body/heading/mono\n- Google Fonts loaded via CDN with `display=swap` — IBM Plex Sans (400/500/600), Space Grotesk (500/700), JetBrains Mono (400)\n- Fixed topbar with Space Grotesk logo, search placeholder, disabled Due/Tags/Lists nav, help button, avatar placeholder\n- Fixed bottom status bar with JetBrains Mono showing mode indicator (NAVIGATE/EDIT), total item count, completed count, contextual shortcut hints\n- Styled item rows: 36px min height, 16px text, 26px indent per level, amber left border + subtle amber bg for selected, styled chevrons and checkboxes, amber border+glow for edit input\n- Single-column ~900px centered layout with proper content area padding for fixed top/bottom bars\n- All 81 existing tests still pass — no behavioral changes\n\n## Verification\n\n- `pnpm typecheck` — zero type errors\n- `pnpm test` — all 81 existing tests pass (no behavioral regressions)\n- Visual verification in browser via `pnpm dev`: dark theme renders, three fonts load without FOUT, topbar shows logo and disabled placeholders, status bar shows mode and counts, item rows have amber selection highlight and edit glow, centered column layout at ~900px",
+      "proof_level": "Operational — visual design verified in running browser, existing test suite confirms no behavioral regressions",
+      "integration_closure": "- Upstream: S02's React component tree (App.tsx, OutlineView.tsx, OutlineItemRow.tsx), AppState model (cursorItemId, editingItemId, getVisibleItems, getChildren, getDepth, items.values)\n- New wiring: Topbar.tsx and StatusBar.tsx composed into App.tsx layout; global.css @theme tokens consumed by all components\n- Remaining for milestone: S04 (IndexedDB persistence + JSON export)",
+      "observability_impact": "None — pure visual/CSS slice with no runtime boundaries, async flows, or error paths",
+      "sequence": 0,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M001",
+      "id": "S04",
+      "title": "Persistence + Export",
+      "status": "complete",
+      "risk": "low",
+      "depends": [
+        "S02"
+      ],
+      "demo": "After this: data survives page refresh via IndexedDB auto-save. User can export all data as a JSON file download. First-time users see a pre-populated demo list.",
+      "created_at": "2026-03-26T02:21:33.496Z",
+      "completed_at": "2026-03-26T03:39:07.911Z",
+      "full_summary_md": "---\nid: S04\nparent: M001\nmilestone: M001\nprovides:\n  - IndexedDB persistence module (save/load/export)\n  - Auto-save wired via onSnapshot with 2s debounce\n  - JSON export download from Topbar\n  - Demo seed for first-time users\nrequires:\n  - slice: S02\n    provides: Keyboard-driven UI with AppState/OutlineItem model and core API\naffects:\n  []\nkey_files:\n  - src/core/persistence.ts\n  - src/core/persistence.test.ts\n  - src/core/api.ts\n  - src/ui/App.tsx\n  - src/ui/Topbar.tsx\nkey_decisions:\n  - Switched from sequential item-N IDs to crypto.randomUUID() for collision-free IDs across sessions\n  - Used fromSnapshot for hydration instead of applySnapshot — creates fresh tree supporting registerRootStore\n  - Persistence stores full Keystone snapshot under a single IDB key for simplicity\n  - Export uses Blob + createObjectURL + hidden anchor pattern\npatterns_established:\n  - IDB persistence via idb wrapper with typed DBSchema\n  - Async App bootstrap — load from IDB, fallback to seed, wire listeners after load\n  - Demo seed function using core API with cleared undo history\nobservability_surfaces:\n  - console.warn on auto-save failure\n  - console.warn on IDB load failure with fallback to demo seed\ndrill_down_paths:\n  - .gsd/milestones/M001/slices/S04/tasks/T01-SUMMARY.md\n  - .gsd/milestones/M001/slices/S04/tasks/T02-SUMMARY.md\n  - .gsd/milestones/M001/slices/S04/tasks/T03-SUMMARY.md\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-26T03:39:07.917Z\nblocker_discovered: false\n---\n\n# S04: Persistence + Export\n\n**IndexedDB auto-save with 2s debounce, JSON file export from Topbar, and rich demo seed for first-time users — data survives page refresh, user can always get their data out.**\n\n## What Happened\n\nBuilt the persistence layer in three tasks. T01 created src/core/persistence.ts with openDB, saveState, loadState, applyLoadedSnapshot, and exportStateAsJSON using the idb wrapper with a typed DBSchema. Switched generateId() from sequential item-N to crypto.randomUUID() to prevent ID collisions across sessions, fixing cascading test breakage across 4 files. T02 rewired App.tsx from synchronous useMemo to async useEffect bootstrap: loads from IDB, falls back to rich demo seed on empty/error, shows loading spinner, wires onSnapshot with 2s debounced auto-save after bootstrap completes. Used fromSnapshot for clean hydration supporting registerRootStore. T03 added downloadExportJson with Blob+createObjectURL+hidden anchor pattern, wired Export button with download icon in Topbar.\n\n## Verification\n\nAll 91 tests pass across 4 test files (60 api, 10 persistence, 14 keyboard, 7 outline row). Zero TypeScript errors. Persistence tests cover round-trip save/load, empty DB, JSON export, snapshot hydration, and download flow.\n\n## Requirements Advanced\n\n- R007 — Auto-save implemented via onSnapshot + debounced saveState to IndexedDB. Data survives page refresh.\n- R008 — downloadExportJson creates JSON Blob and triggers browser download. Export button in Topbar.\n\n## Requirements Validated\n\n- R007 — 10 persistence tests covering round-trip save/load, snapshot hydration, empty DB fallback. App.tsx wires onSnapshot → debounced saveState.\n- R008 — Unit test verifies full download flow (createElement, createObjectURL, anchor.click, cleanup). Export button wired in Topbar.\n\n## New Requirements Surfaced\n\nNone.\n\n## Requirements Invalidated or Re-scoped\n\nNone.\n\n## Deviations\n\nT01 required fixing _resetIdCounter references and hardcoded item-N ID assertions in useKeyboardHandler.test.tsx and OutlineItemRow.test.tsx — direct consequence of switching to UUIDs.\n\n## Known Limitations\n\nNo import functionality — export is one-way. Auto-save stores entire snapshot as a single blob (no incremental persistence). No visual indicator of save status.\n\n## Follow-ups\n\nNone — this is the final slice of M001.\n\n## Files Created/Modified\n\n- `src/core/persistence.ts` — IndexedDB persistence module — open, save, load, export, download\n- `src/core/persistence.test.ts` — 10 tests covering round-trip, hydration, export, download\n- `src/core/api.ts` — Switched generateId to crypto.randomUUID(), added loadAppState for hydration\n- `src/core/api.test.ts` — Fixed hardcoded item-N ID assertions\n- `src/ui/App.tsx` — Async bootstrap with IDB load, demo seed fallback, debounced auto-save\n- `src/ui/Topbar.tsx` — Added Export button with download icon\n- `src/ui/useKeyboardHandler.test.tsx` — Fixed _resetIdCounter removal\n- `src/ui/OutlineItemRow.test.tsx` — Fixed _resetIdCounter removal\n- `package.json` — Added fake-indexeddb dev dependency\n",
+      "full_uat_md": "# S04: Persistence + Export — UAT\n\n**Milestone:** M001\n**Written:** 2026-03-26T03:39:07.918Z\n\n# S04: Persistence + Export — UAT\n\n**Milestone:** M001\n**Written:** 2026-03-26\n\n## UAT Type\n\n- UAT mode: mixed (artifact-driven + live-runtime)\n- Why this mode is sufficient: Persistence and export are verified via unit tests (artifact-driven) but data-survives-refresh and Export button require live browser interaction to fully prove.\n\n## Preconditions\n\n- `pnpm dev` running at localhost:5173\n- Browser with IndexedDB support (any modern browser)\n- Fresh browser profile or cleared IndexedDB for VistaNest (to test first-run seed)\n\n## Smoke Test\n\nOpen `http://localhost:5173` in the browser. The app should load within 1-2 seconds, showing a demo outline with \"🌲 Welcome to VistaNest\" and keyboard shortcut hints. This confirms IDB load + demo seed + rendering all work together.\n\n## Test Cases\n\n### 1. First-Run Demo Seed\n\n1. Clear IndexedDB for the VistaNest domain (DevTools → Application → Storage → Clear site data)\n2. Reload the page\n3. **Expected:** A multi-level welcome outline appears with items like \"🌲 Welcome to VistaNest\", keyboard shortcut hints, and \"✏️ Try it out\" section.\n\n### 2. Data Survives Page Refresh\n\n1. Add a new item: press `o`, type \"Persistence test item\", press `Esc`\n2. Wait at least 3 seconds (auto-save debounce is 2s)\n3. Reload the page (F5)\n4. **Expected:** \"Persistence test item\" is present in the outline with all other items preserved.\n\n### 3. Multiple Edits Persist\n\n1. Create 3 new items with distinct content\n2. Indent one (Tab), mark one complete (x)\n3. Wait 3 seconds, reload\n4. **Expected:** All 3 items present with correct content, indentation, and completion state.\n\n### 4. JSON Export Download\n\n1. Click the Export button (download icon) in the top bar\n2. **Expected:** A file downloads named `vistanest-export-YYYY-MM-DD.json`\n3. Open the file — valid JSON with `$modelType`, `items` object, `title` field.\n\n### 5. Export Button Location\n\n1. Look at the top bar\n2. **Expected:** Export button visible next to Help (?), has download arrow icon and \"Export\" label, matches dark theme.\n\n### 6. Loading State\n\n1. Set network throttling to Slow 3G, reload\n2. **Expected:** \"Loading…\" with pulsing animation appears briefly before outline renders.\n\n## Edge Cases\n\n### IDB Load Error Fallback\n\n1. Run `indexedDB.deleteDatabase('vistanest')` in console, reload\n2. **Expected:** App falls back to demo seed. console.warn in DevTools, no user-facing error.\n\n### Undo History Cleared After Load\n\n1. Clear IDB, reload to get demo seed\n2. Press `u` (undo)\n3. **Expected:** Nothing happens — demo seed operations are not undoable.\n\n## Failure Signals\n\n- Page shows \"Loading…\" forever — bootstrap stuck\n- Data missing after reload — auto-save not firing\n- Export produces empty/malformed JSON\n- Export button missing from Topbar\n- console.warn messages about save/load failures\n\n## Not Proven By This UAT\n\n- Import functionality (does not exist)\n- Performance with large datasets\n- Cross-browser IDB compatibility\n- Auto-save visual indicator (none exists)\n\n## Notes for Tester\n\n- Wait at least 3 seconds after last edit before reloading to verify persistence (2s debounce).\n- Export triggers immediate download — no confirmation dialog.\n- Test in normal browser window, not incognito (IDB may be restricted).\n",
+      "goal": "Data survives page refresh via IndexedDB auto-save. User can export all data as a JSON file download. First-time users see a pre-populated demo list.",
+      "success_criteria": "- Auto-save writes state to IndexedDB within ~2s of any mutation\n- Page refresh restores all items, tree structure, content, and completion state from IndexedDB\n- First load (empty IDB) shows a multi-level demo outline\n- Second load shows persisted data, not demo\n- Export button triggers a JSON file download containing a valid AppState snapshot\n- `pnpm test` — all existing tests pass + new persistence/export tests pass\n- `pnpm typecheck` — clean",
+      "proof_level": "integration — persistence round-trip, auto-save debounce, export download all proven with tests. Browser runtime required for full export download but unit tests verify the Blob/JSON shape.",
+      "integration_closure": "- Upstream surfaces consumed: `src/core/api.ts` (createAppState, generateId, setupUndo), `src/core/model.ts` (AppState, OutlineItem), `src/ui/App.tsx` (bootstrap), `src/ui/Topbar.tsx` (export button placement)\n- New wiring: App.tsx becomes async (load from IDB → seed if empty → render). `onSnapshot` listener for auto-save attached after initial load. Export button in Topbar triggers JSON download.\n- What remains: nothing — after this slice the milestone is feature-complete.",
+      "observability_impact": "- Runtime signals: console.warn on IDB load failure with fallback to demo seed\n- Inspection surfaces: Browser DevTools → Application → IndexedDB → vistanest-db → state store\n- Failure visibility: IDB errors logged with error object. Load failures fall back to demo seed (never blank screen).\n- Redaction constraints: none — no secrets or PII in outline data",
+      "sequence": 0,
+      "replan_triggered_at": null
+    }
+  ],
+  "tasks": [
+    {
+      "milestone_id": "M001",
+      "slice_id": "S01",
+      "id": "T01",
+      "title": "Built OutlineItem/AppState Keystone models and complete core API with 13 passing CRUD+editing tests",
+      "status": "complete",
+      "one_liner": "Built OutlineItem/AppState Keystone models and complete core API with 13 passing CRUD+editing tests",
+      "narrative": "Created the foundation data model and API layer for the outliner. OutlineItem model with id, content, parentId, sortOrder, isCompleted, isCollapsed, isArchived, note — each with @modelAction setter. AppState model with title, items (ObjectMap), cursorItemId, editingItemId — plus query methods getItem, getChildren (filtered/sorted), getSiblings, getVisibleItems (recursive DFS). Full API: createAppState, insertBelow, insertAbove, archiveItem (cascading), setContent, startEditing/stopEditing, indentItem/outdentItem, moveItemUp/moveItemDown, toggleComplete/toggleCollapse, moveCursorUp/moveCursorDown, undo/redo. All operations wrapped in um.withGroup(). Undo middleware uses attachedState for cursor/editing restore. 13 tests cover all CRUD and editing operations. Fixed a sortOrder mutation-ordering bug in insertAbove.",
+      "verification_result": "Ran pnpm typecheck (0 type errors) and npx vitest run src/core/api.test.ts --reporter=verbose (13/13 tests pass). Both exit code 0.",
+      "duration": "",
+      "completed_at": "2026-03-26T02:33:57.350Z",
+      "blocker_discovered": false,
+      "deviations": "Fixed insertAbove sortOrder computation — captured refOrder before bumping siblings to avoid mutation-ordering bug.",
+      "known_issues": "None.",
+      "key_files": [
+        "src/core/model.ts",
+        "src/core/api.ts",
+        "src/core/api.test.ts"
+      ],
+      "key_decisions": [
+        "Sequential integer ID generator with test reset for determinism",
+        "renumberChildren helper to prevent sortOrder drift after indent/outdent",
+        "All API functions take (state, um, ...args) signature for uniform undo grouping"
+      ],
+      "full_summary_md": "---\nid: T01\nparent: S01\nmilestone: M001\nkey_files:\n  - src/core/model.ts\n  - src/core/api.ts\n  - src/core/api.test.ts\nkey_decisions:\n  - Sequential integer ID generator with test reset for determinism\n  - renumberChildren helper to prevent sortOrder drift after indent/outdent\n  - All API functions take (state, um, ...args) signature for uniform undo grouping\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-26T02:33:57.352Z\nblocker_discovered: false\n---\n\n# T01: Built OutlineItem/AppState Keystone models and complete core API with 13 passing CRUD+editing tests\n\n**Built OutlineItem/AppState Keystone models and complete core API with 13 passing CRUD+editing tests**\n\n## What Happened\n\nCreated the foundation data model and API layer for the outliner. OutlineItem model with id, content, parentId, sortOrder, isCompleted, isCollapsed, isArchived, note — each with @modelAction setter. AppState model with title, items (ObjectMap), cursorItemId, editingItemId — plus query methods getItem, getChildren (filtered/sorted), getSiblings, getVisibleItems (recursive DFS). Full API: createAppState, insertBelow, insertAbove, archiveItem (cascading), setContent, startEditing/stopEditing, indentItem/outdentItem, moveItemUp/moveItemDown, toggleComplete/toggleCollapse, moveCursorUp/moveCursorDown, undo/redo. All operations wrapped in um.withGroup(). Undo middleware uses attachedState for cursor/editing restore. 13 tests cover all CRUD and editing operations. Fixed a sortOrder mutation-ordering bug in insertAbove.\n\n## Verification\n\nRan pnpm typecheck (0 type errors) and npx vitest run src/core/api.test.ts --reporter=verbose (13/13 tests pass). Both exit code 0.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `pnpm typecheck` | 0 | ✅ pass | 2900ms |\n| 2 | `npx vitest run src/core/api.test.ts --reporter=verbose` | 0 | ✅ pass | 1300ms |\n\n\n## Deviations\n\nFixed insertAbove sortOrder computation — captured refOrder before bumping siblings to avoid mutation-ordering bug.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `src/core/model.ts`\n- `src/core/api.ts`\n- `src/core/api.test.ts`\n",
+      "description": "Build the complete data model and core API for the outliner. This is the foundation — every subsequent task and slice depends on these exports.\n\n**Model (`src/core/model.ts`):**\n- `OutlineItem` model with fields: `id` (idProp), `content` (string, default ''), `parentId` (string | null, default null), `sortOrder` (number, default 0), `isCompleted` (boolean, default false), `isCollapsed` (boolean, default false), `isArchived` (boolean, default false), `note` (string, default '')\n- Each field gets a `@modelAction` setter: `setContent`, `setParentId`, `setSortOrder`, `setCompleted`, `setCollapsed`, `setArchived`, `setNote`\n- `AppState` model with fields: `title` (string, default 'Untitled'), `items` (ObjectMap<OutlineItem>), `cursorItemId` (string | null, default null), `editingItemId` (string | null, default null)\n- `@modelAction` setters: `setTitle`, `setCursor`, `setEditing`\n- Query methods on AppState: `getItem(id)`, `getChildren(parentId)` (returns non-archived children sorted by sortOrder), `getSiblings(itemId)`, `getVisibleItems()` (recursive DFS respecting isCollapsed and isArchived)\n\n**API (`src/core/api.ts`):**\n- `createAppState()` — creates and registers root store, returns `{ state, undoManager }`\n- `setupUndo(state)` — attaches undoMiddleware with `attachedState` for cursor/editing, returns UndoManager\n- CRUD: `insertBelow(state, um, referenceId?)`, `insertAbove(state, um, referenceId?)`, `archiveItem(state, um, itemId)` (must cascade isArchived to all descendants), `setContent(state, um, itemId, content)`\n- Editing: `startEditing(state, um, itemId)`, `stopEditing(state, um)`\n- Tree ops: `indentItem(state, um, itemId)`, `outdentItem(state, um, itemId)`, `moveItemUp(state, um, itemId)`, `moveItemDown(state, um, itemId)`\n- State: `toggleComplete(state, um, itemId)`, `toggleCollapse(state, um, itemId)`\n- Navigation: `moveCursorUp(state, um)`, `moveCursorDown(state, um)`\n- Undo: `undo(um)`, `redo(um)`\n- Every user-facing function wraps mutations in `um.withGroup()` so compound operations are a single undo step\n- `attachedState` in undoMiddleware saves/restores `cursorItemId` and `editingItemId`\n- Cursor restore in undo callback uses `um.withoutUndo(() => state.setCursor(...))`\n\n**Tests (`src/core/api.test.ts`):**\n- Write tests for CRUD operations: createAppState returns valid state, insertBelow adds item and moves cursor, insertAbove adds item above reference, insertBelow with no items creates first item, archiveItem sets isArchived on target and all descendants, archiveItem moves cursor to nearest visible sibling, setContent updates item content\n- Write tests for editing: startEditing/stopEditing set editingItemId correctly\n\n**Key constraints from research:**\n- `registerRootStore(state)` must be called before undo middleware works\n- `ObjectMap` uses `.set(id, item)` / `.get(id)` / `.delete(id)` — snapshot has double-nesting `state.items.items`\n- All mutations must be inside `@modelAction` methods\n- `experimentalDecorators: true` is already in tsconfig\n- `getChildren` must filter out archived items and sort by sortOrder\n- `getVisibleItems` does recursive DFS: skip archived items, skip children of collapsed items",
+      "estimate": "1h30m",
+      "files": [
+        "src/core/model.ts",
+        "src/core/api.ts",
+        "src/core/api.test.ts"
+      ],
+      "verify": "pnpm typecheck && npx vitest run src/core/api.test.ts --reporter=verbose",
+      "inputs": [
+        "package.json",
+        "tsconfig.json",
+        "vitest.config.ts"
+      ],
+      "expected_output": [
+        "src/core/model.ts",
+        "src/core/api.ts",
+        "src/core/api.test.ts"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M001",
+      "slice_id": "S01",
+      "id": "T02",
+      "title": "Added 29 comprehensive tests for tree manipulation, navigation, and state operations plus fixed outdentItem sibling re-parenting",
+      "status": "complete",
+      "one_liner": "Added 29 comprehensive tests for tree manipulation, navigation, and state operations plus fixed outdentItem sibling re-parenting",
+      "narrative": "Wrote comprehensive tests for the riskiest tree operations: 6 indent tests, 5 outdent tests, 4 move tests, 8 cursor navigation tests, 4 toggle tests, 1 deep collapse test, and 1 sort order stability test. The outdent sibling re-parenting test revealed that outdentItem was not re-parenting subsequent siblings — fixed the implementation to match standard outliner behavior (WorkFlowy, Dynalist). All 42 tests pass.",
+      "verification_result": "Ran npx vitest run src/core/api.test.ts --reporter=verbose — all 42 tests pass (13 from T01 + 29 new).",
+      "duration": "",
+      "completed_at": "2026-03-26T02:36:58.565Z",
+      "blocker_discovered": false,
+      "deviations": "Fixed outdentItem in api.ts to re-parent subsequent siblings as children of the outdented item — test exposed missing behavior from T01. Adjusted sort order test expectations to match corrected behavior.",
+      "known_issues": "None.",
+      "key_files": [
+        "src/core/api.test.ts",
+        "src/core/api.ts"
+      ],
+      "key_decisions": [
+        "outdentItem re-parents subsequent siblings as children of the outdented item, matching standard outliner behavior",
+        "toggleCollapse is allowed on leaf nodes — collapse state is harmless and simplifies the API"
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S01\nmilestone: M001\nkey_files:\n  - src/core/api.test.ts\n  - src/core/api.ts\nkey_decisions:\n  - outdentItem re-parents subsequent siblings as children of the outdented item, matching standard outliner behavior\n  - toggleCollapse is allowed on leaf nodes — collapse state is harmless and simplifies the API\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-26T02:36:58.567Z\nblocker_discovered: false\n---\n\n# T02: Added 29 comprehensive tests for tree manipulation, navigation, and state operations plus fixed outdentItem sibling re-parenting\n\n**Added 29 comprehensive tests for tree manipulation, navigation, and state operations plus fixed outdentItem sibling re-parenting**\n\n## What Happened\n\nWrote comprehensive tests for the riskiest tree operations: 6 indent tests, 5 outdent tests, 4 move tests, 8 cursor navigation tests, 4 toggle tests, 1 deep collapse test, and 1 sort order stability test. The outdent sibling re-parenting test revealed that outdentItem was not re-parenting subsequent siblings — fixed the implementation to match standard outliner behavior (WorkFlowy, Dynalist). All 42 tests pass.\n\n## Verification\n\nRan npx vitest run src/core/api.test.ts --reporter=verbose — all 42 tests pass (13 from T01 + 29 new).\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `npx vitest run src/core/api.test.ts --reporter=verbose` | 0 | ✅ pass | 1490ms |\n\n\n## Deviations\n\nFixed outdentItem in api.ts to re-parent subsequent siblings as children of the outdented item — test exposed missing behavior from T01. Adjusted sort order test expectations to match corrected behavior.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `src/core/api.test.ts`\n- `src/core/api.ts`\n",
+      "description": "Write thorough tests for the riskiest operations: indent/outdent (sort order recalculation, boundary conditions), move up/down, cursor navigation (especially with collapsed subtrees), toggleComplete, and toggleCollapse. These edge cases are where bugs will hide.\n\n**Tests to add in `src/core/api.test.ts`:**\n\nIndent tests:\n- indentItem makes item the last child of its previous sibling (parentId changes, sortOrder is max+1 among new siblings)\n- indentItem on first sibling (no previous sibling) is a no-op\n- indentItem moves item's children along with it (children keep their parentId pointing to the indented item)\n- indentItem cursor stays on the indented item\n\nOutdent tests:\n- outdentItem moves item to parent's parent, inserted after the old parent among grandparent's children\n- outdentItem on top-level item (parentId === null) is a no-op\n- outdentItem re-parents subsequent siblings of the outdented item as children of the outdented item\n- outdentItem sort orders are recalculated correctly for all affected items\n\nMove tests:\n- moveItemUp swaps sortOrder with previous sibling\n- moveItemUp on first sibling is a no-op\n- moveItemDown swaps sortOrder with next sibling\n- moveItemDown on last sibling is a no-op\n\nNavigation tests:\n- moveCursorDown moves to next visible item\n- moveCursorUp moves to previous visible item\n- moveCursorDown skips children of collapsed items\n- moveCursorUp skips children of collapsed items\n- moveCursorDown at last visible item is a no-op\n- moveCursorUp at first visible item is a no-op\n- cursor navigation skips archived items\n\nState toggle tests:\n- toggleComplete flips isCompleted\n- toggleComplete on already-completed item uncompletes it\n- toggleCollapse flips isCollapsed\n- toggleCollapse on item with no children is a no-op or allowed (decide: allow it — collapse state is harmless on leaf nodes)\n\n**Key edge cases to cover:**\n- Indent when previous sibling is collapsed — item should still become its child\n- Outdent with children — children of outdented item stay as its children\n- Sort order gaps after multiple operations don't break ordering\n- getVisibleItems correctly handles deeply nested collapsed trees (3+ levels)",
+      "estimate": "1h",
+      "files": [
+        "src/core/api.test.ts"
+      ],
+      "verify": "npx vitest run src/core/api.test.ts --reporter=verbose",
+      "inputs": [
+        "src/core/model.ts",
+        "src/core/api.ts",
+        "src/core/api.test.ts"
+      ],
+      "expected_output": [
+        "src/core/api.test.ts"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M001",
+      "slice_id": "S01",
+      "id": "T03",
+      "title": "Added 15 undo/redo tests and integration workflow test proving full API composition, plus migrated sortOrder to fraci fractional indexing",
+      "status": "complete",
+      "one_liner": "Added 15 undo/redo tests and integration workflow test proving full API composition, plus migrated sortOrder to fraci fractional indexing",
+      "narrative": "Wrote 15 new tests covering undo/redo for every operation type (insertBelow, archiveItem, indentItem, outdentItem, moveItemUp, toggleComplete, toggleCollapse, setContent), plus redo, LIFO ordering, no-op safety, compound operation atomicity, and cursor restore. Added a large integration workflow test exercising a realistic session with cursor validity assertions throughout. Migrated sortOrder from sequential integers to fraci fractional indexing (fraciString with BASE62), eliminating renumberChildren and making ordering insert-only. All 57 tests pass with clean typecheck.",
+      "verification_result": "Ran pnpm typecheck (0 type errors, exit 0) and pnpm test (57/57 tests pass, exit 0).",
+      "duration": "",
+      "completed_at": "2026-03-26T02:45:31.643Z",
+      "blocker_discovered": false,
+      "deviations": "Migrated sortOrder from number to string (fraci fractional indexing) as requested by user — not in original task plan. Rewrote existing tests to use API functions instead of manual setParentId/setSortOrder calls.",
+      "known_issues": "None.",
+      "key_files": [
+        "src/core/api.test.ts",
+        "src/core/api.ts",
+        "src/core/model.ts"
+      ],
+      "key_decisions": [
+        "Use fraci (fraciString with BASE62) for fractional indexing instead of sequential integers",
+        "fraci sortOrder stored as plain string in Keystone model, cast to branded FractionalIndex type at API boundaries"
+      ],
+      "full_summary_md": "---\nid: T03\nparent: S01\nmilestone: M001\nkey_files:\n  - src/core/api.test.ts\n  - src/core/api.ts\n  - src/core/model.ts\nkey_decisions:\n  - Use fraci (fraciString with BASE62) for fractional indexing instead of sequential integers\n  - fraci sortOrder stored as plain string in Keystone model, cast to branded FractionalIndex type at API boundaries\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-26T02:45:31.646Z\nblocker_discovered: false\n---\n\n# T03: Added 15 undo/redo tests and integration workflow test proving full API composition, plus migrated sortOrder to fraci fractional indexing\n\n**Added 15 undo/redo tests and integration workflow test proving full API composition, plus migrated sortOrder to fraci fractional indexing**\n\n## What Happened\n\nWrote 15 new tests covering undo/redo for every operation type (insertBelow, archiveItem, indentItem, outdentItem, moveItemUp, toggleComplete, toggleCollapse, setContent), plus redo, LIFO ordering, no-op safety, compound operation atomicity, and cursor restore. Added a large integration workflow test exercising a realistic session with cursor validity assertions throughout. Migrated sortOrder from sequential integers to fraci fractional indexing (fraciString with BASE62), eliminating renumberChildren and making ordering insert-only. All 57 tests pass with clean typecheck.\n\n## Verification\n\nRan pnpm typecheck (0 type errors, exit 0) and pnpm test (57/57 tests pass, exit 0).\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `pnpm typecheck` | 0 | ✅ pass | 3600ms |\n| 2 | `pnpm test` | 0 | ✅ pass | 1380ms |\n\n\n## Deviations\n\nMigrated sortOrder from number to string (fraci fractional indexing) as requested by user — not in original task plan. Rewrote existing tests to use API functions instead of manual setParentId/setSortOrder calls.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `src/core/api.test.ts`\n- `src/core/api.ts`\n- `src/core/model.ts`\n",
+      "description": "Write undo/redo coverage for every operation and a large integration test that exercises a realistic user workflow. This is the capstone that proves the API composes correctly and retires the riskiest unknowns.\n\n**Undo/redo tests to add in `src/core/api.test.ts`:**\n\n- undo after insertBelow removes the item and restores cursor to previous position\n- undo after archiveItem restores item (and descendants) with isArchived=false and restores cursor\n- undo after indentItem restores original parentId and sortOrder\n- undo after outdentItem restores original parentId and sortOrder\n- undo after moveItemUp restores original sortOrder\n- undo after toggleComplete restores original isCompleted\n- undo after toggleCollapse restores original isCollapsed\n- undo after setContent restores original content\n- redo after undo re-applies the operation\n- multiple undo steps work in correct LIFO order\n- undo with no history is a no-op (doesn't throw)\n- redo with no future is a no-op (doesn't throw)\n- compound operations (insertBelow = addItem + setCursor) undo as one step\n- cursor position is correctly restored on undo for every operation type\n\n**Integration workflow test:**\nA single large test that exercises a realistic session:\n1. Create state, insert 5 items (A, B, C, D, E) at top level\n2. Indent B and C under A (A has children B, C)\n3. Indent D under C (C has child D)\n4. Verify getVisibleItems returns correct order: A, B, C, D, E\n5. Collapse A — verify getVisibleItems returns: A, E (B, C, D hidden)\n6. Expand A — verify full list again\n7. Complete item B — verify isCompleted\n8. Archive item C — verify C and D are archived, visible items are A, B, E\n9. Undo archive — verify C and D restored, cursor restored\n10. Move E up — verify E is now before A (or after D, depending on top-level sort)\n11. Undo 3 times — verify state rollback is consistent\n12. Redo 2 times — verify state rolls forward correctly\n13. Throughout: assert cursor is always pointing at a valid, visible, non-archived item\n\n**Final verification: run full test suite and typecheck**",
+      "estimate": "1h",
+      "files": [
+        "src/core/api.test.ts"
+      ],
+      "verify": "pnpm typecheck && pnpm test",
+      "inputs": [
+        "src/core/model.ts",
+        "src/core/api.ts",
+        "src/core/api.test.ts"
+      ],
+      "expected_output": [
+        "src/core/api.test.ts"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M001",
+      "slice_id": "S02",
+      "id": "T01",
+      "title": "Added React ↔ MobX wiring layer with context provider, OutlineView/OutlineItemRow observer components, getDepth() utility, and seeded initial items",
+      "status": "complete",
+      "one_liner": "Added React ↔ MobX wiring layer with context provider, OutlineView/OutlineItemRow observer components, getDepth() utility, and seeded initial items",
+      "narrative": "Added getDepth(itemId) to AppState in model.ts — walks the parentId chain to compute nesting depth. Created React context (src/ui/context.ts) with OutlineProvider and useAppState() hook. Built OutlineItemRow as an observer component with depth-based left padding, collapse chevron, checkbox indicator with strikethrough, and cursor highlight. Built OutlineView as an observer that maps getVisibleItems() to OutlineItemRow elements. Refactored App.tsx to bootstrap state, seed 3 items (2 root + 1 nested child), clear undo history, and provide context. Added 3 getDepth tests.",
+      "verification_result": "Ran pnpm typecheck (tsc --noEmit) — clean, no errors. Ran pnpm test (vitest run) — all 60 tests pass (57 existing + 3 new getDepth tests).",
+      "duration": "",
+      "completed_at": "2026-03-26T02:57:00.397Z",
+      "blocker_discovered": false,
+      "deviations": "None.",
+      "known_issues": "None.",
+      "key_files": [
+        "src/ui/context.ts",
+        "src/ui/OutlineView.tsx",
+        "src/ui/OutlineItemRow.tsx",
+        "src/ui/App.tsx",
+        "src/core/model.ts",
+        "src/core/api.test.ts"
+      ],
+      "key_decisions": [
+        "Used React context (not prop drilling) for AppState/UndoManager distribution",
+        "Flat list rendering via getVisibleItems() map rather than recursive component tree",
+        "Depth-based left padding via inline style computed from getDepth() walking parentId chain",
+        "Seed operations cleared from undo stack via undoManager.clearUndo()"
+      ],
+      "full_summary_md": "---\nid: T01\nparent: S02\nmilestone: M001\nkey_files:\n  - src/ui/context.ts\n  - src/ui/OutlineView.tsx\n  - src/ui/OutlineItemRow.tsx\n  - src/ui/App.tsx\n  - src/core/model.ts\n  - src/core/api.test.ts\nkey_decisions:\n  - Used React context (not prop drilling) for AppState/UndoManager distribution\n  - Flat list rendering via getVisibleItems() map rather than recursive component tree\n  - Depth-based left padding via inline style computed from getDepth() walking parentId chain\n  - Seed operations cleared from undo stack via undoManager.clearUndo()\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-26T02:57:00.402Z\nblocker_discovered: false\n---\n\n# T01: Added React ↔ MobX wiring layer with context provider, OutlineView/OutlineItemRow observer components, getDepth() utility, and seeded initial items\n\n**Added React ↔ MobX wiring layer with context provider, OutlineView/OutlineItemRow observer components, getDepth() utility, and seeded initial items**\n\n## What Happened\n\nAdded getDepth(itemId) to AppState in model.ts — walks the parentId chain to compute nesting depth. Created React context (src/ui/context.ts) with OutlineProvider and useAppState() hook. Built OutlineItemRow as an observer component with depth-based left padding, collapse chevron, checkbox indicator with strikethrough, and cursor highlight. Built OutlineView as an observer that maps getVisibleItems() to OutlineItemRow elements. Refactored App.tsx to bootstrap state, seed 3 items (2 root + 1 nested child), clear undo history, and provide context. Added 3 getDepth tests.\n\n## Verification\n\nRan pnpm typecheck (tsc --noEmit) — clean, no errors. Ran pnpm test (vitest run) — all 60 tests pass (57 existing + 3 new getDepth tests).\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `npx tsc --noEmit` | 0 | ✅ pass | 2300ms |\n| 2 | `npx vitest run` | 0 | ✅ pass | 4300ms |\n\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `src/ui/context.ts`\n- `src/ui/OutlineView.tsx`\n- `src/ui/OutlineItemRow.tsx`\n- `src/ui/App.tsx`\n- `src/core/model.ts`\n- `src/core/api.test.ts`\n",
+      "description": "Create the React ↔ MobX wiring layer: a context provider for AppState/UndoManager, an OutlineView component that renders getVisibleItems() as a flat list, and an OutlineItemRow component that shows content with depth-based indentation and cursor highlighting. Add a getDepth() utility to model.ts. Seed an initial item so there's something to see. This proves the MobX observer pipeline works before adding keyboard interaction.\n\nComponents must be wrapped in mobx-react-lite observer() to re-render on MobX state changes. getVisibleItems() already returns a flat DFS-ordered list respecting collapse/archive, so rendering is a simple map — no recursive component tree needed. Depth-based left padding comes from walking the parentId chain via the new getDepth() utility.\n\nKey constraints:\n- All components reading MobX state must be observer() wrapped\n- Use React context (not prop drilling) for state/undoManager\n- Seed at least 3 items (2 root + 1 child) so depth indentation and cursor movement are visually verifiable\n- Cursor highlight: apply a distinct background class to the item matching state.cursorItemId\n- Collapse chevron: show a toggle indicator on items that have children\n- Checkbox: show completed state visually (strikethrough or checkbox indicator)",
+      "estimate": "45m",
+      "files": [
+        "src/ui/context.ts",
+        "src/ui/OutlineView.tsx",
+        "src/ui/OutlineItemRow.tsx",
+        "src/ui/App.tsx",
+        "src/core/model.ts"
+      ],
+      "verify": "pnpm typecheck && pnpm test",
+      "inputs": [
+        "`src/core/model.ts` — AppState and OutlineItem models with getVisibleItems(), getChildren(), getItem()",
+        "`src/core/api.ts` — createAppState(), setupUndo(), insertBelow(), setContent() for seeding initial items",
+        "`src/ui/App.tsx` — existing bare shell to be refactored",
+        "`src/index.tsx` — app entry point (no changes needed, already renders App)"
+      ],
+      "expected_output": [
+        "`src/ui/context.ts` — React context for { state: AppState, undoManager: UndoManager } with useAppState() hook",
+        "`src/ui/OutlineView.tsx` — observer component rendering getVisibleItems() as flat list of OutlineItemRow",
+        "`src/ui/OutlineItemRow.tsx` — observer component: depth padding, cursor highlight, collapse chevron, completion indicator, content display",
+        "`src/ui/App.tsx` — refactored to bootstrap AppState/UndoManager, provide via context, seed initial items, render OutlineView",
+        "`src/core/model.ts` — added getDepth(itemId) utility method to AppState"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M001",
+      "slice_id": "S02",
+      "id": "T02",
+      "title": "Created useKeyboardHandler hook with document-level keydown listener dispatching 16 navigation-mode shortcuts to core API, plus 14 tests covering all keybindings",
+      "status": "complete",
+      "one_liner": "Created useKeyboardHandler hook with document-level keydown listener dispatching 16 navigation-mode shortcuts to core API, plus 14 tests covering all keybindings",
+      "narrative": "Built useKeyboardHandler.ts — a custom React hook attaching a document-level keydown listener with useEffect cleanup. Dispatches 16 navigation-mode shortcuts: j/ArrowDown, k/ArrowUp, o/O insert+edit, Tab/Shift+Tab indent/outdent, Space toggle complete, h/l collapse, Backspace archive-when-empty, Enter start editing, Ctrl+z undo, Ctrl+Shift+z redo, Ctrl+Arrow reorder. Created KeyboardHandlerHost.tsx wrapper component so the hook can consume OutlineProvider context (App.tsx renders the provider, so can't also consume it). Wired into App.tsx. Added @testing-library/react and wrote 14 tests covering every shortcut, edit-mode passthrough, null-cursor guard, and cleanup on unmount.",
+      "verification_result": "Ran pnpm typecheck (tsc --noEmit) — clean, zero errors. Ran pnpm test (vitest run) — all 74 tests pass (60 existing + 14 new keyboard handler tests).",
+      "duration": "",
+      "completed_at": "2026-03-26T03:00:28.225Z",
+      "blocker_discovered": false,
+      "deviations": "Added KeyboardHandlerHost.tsx wrapper component (not in original plan) because useKeyboardHandler calls useAppState() which requires OutlineProvider as ancestor. Standard React context pattern.",
+      "known_issues": "None.",
+      "key_files": [
+        "src/ui/useKeyboardHandler.ts",
+        "src/ui/KeyboardHandlerHost.tsx",
+        "src/ui/useKeyboardHandler.test.tsx",
+        "src/ui/App.tsx"
+      ],
+      "key_decisions": [
+        "Created KeyboardHandlerHost wrapper component so useKeyboardHandler can call useAppState() inside OutlineProvider context",
+        "Undo/redo handled before cursor-guarded shortcuts since they work without a cursor target",
+        "Ctrl+Arrow reorder checked before plain Arrow to avoid modifier ambiguity"
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S02\nmilestone: M001\nkey_files:\n  - src/ui/useKeyboardHandler.ts\n  - src/ui/KeyboardHandlerHost.tsx\n  - src/ui/useKeyboardHandler.test.tsx\n  - src/ui/App.tsx\nkey_decisions:\n  - Created KeyboardHandlerHost wrapper component so useKeyboardHandler can call useAppState() inside OutlineProvider context\n  - Undo/redo handled before cursor-guarded shortcuts since they work without a cursor target\n  - Ctrl+Arrow reorder checked before plain Arrow to avoid modifier ambiguity\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-26T03:00:28.229Z\nblocker_discovered: false\n---\n\n# T02: Created useKeyboardHandler hook with document-level keydown listener dispatching 16 navigation-mode shortcuts to core API, plus 14 tests covering all keybindings\n\n**Created useKeyboardHandler hook with document-level keydown listener dispatching 16 navigation-mode shortcuts to core API, plus 14 tests covering all keybindings**\n\n## What Happened\n\nBuilt useKeyboardHandler.ts — a custom React hook attaching a document-level keydown listener with useEffect cleanup. Dispatches 16 navigation-mode shortcuts: j/ArrowDown, k/ArrowUp, o/O insert+edit, Tab/Shift+Tab indent/outdent, Space toggle complete, h/l collapse, Backspace archive-when-empty, Enter start editing, Ctrl+z undo, Ctrl+Shift+z redo, Ctrl+Arrow reorder. Created KeyboardHandlerHost.tsx wrapper component so the hook can consume OutlineProvider context (App.tsx renders the provider, so can't also consume it). Wired into App.tsx. Added @testing-library/react and wrote 14 tests covering every shortcut, edit-mode passthrough, null-cursor guard, and cleanup on unmount.\n\n## Verification\n\nRan pnpm typecheck (tsc --noEmit) — clean, zero errors. Ran pnpm test (vitest run) — all 74 tests pass (60 existing + 14 new keyboard handler tests).\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `npx tsc --noEmit` | 0 | ✅ pass | 6800ms |\n| 2 | `npx vitest run` | 0 | ✅ pass | 3400ms |\n\n\n## Deviations\n\nAdded KeyboardHandlerHost.tsx wrapper component (not in original plan) because useKeyboardHandler calls useAppState() which requires OutlineProvider as ancestor. Standard React context pattern.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `src/ui/useKeyboardHandler.ts`\n- `src/ui/KeyboardHandlerHost.tsx`\n- `src/ui/useKeyboardHandler.test.tsx`\n- `src/ui/App.tsx`\n",
+      "description": "Create a useKeyboardHandler custom hook that attaches a document-level keydown listener and dispatches navigation-mode shortcuts to core API functions. This task delivers the bulk of R003 (keyboard navigation).\n\nThe hook reads state.editingItemId to determine mode: when null, single keys are shortcuts; when non-null, keys should pass through to the input (edit mode handling is T03). The keydown handler must be inside a useEffect with proper cleanup to avoid double-binding in React 19 StrictMode.\n\nNavigation-mode key map:\n- j / ArrowDown → moveCursorDown(state, um)\n- k / ArrowUp → moveCursorUp(state, um)\n- o → insertBelow(state, um, cursorItemId) then startEditing(state, um, newId)\n- O (Shift+o) → insertAbove(state, um, cursorItemId) then startEditing(state, um, newId)\n- Tab → indentItem(state, um, cursorItemId) — must preventDefault()\n- Shift+Tab → outdentItem(state, um, cursorItemId) — must preventDefault()\n- Space → toggleComplete(state, um, cursorItemId) — must preventDefault()\n- h / l → toggleCollapse(state, um, cursorItemId)\n- Backspace → archiveItem(state, um, cursorItemId) only when item content is empty\n- Enter → startEditing(state, um, cursorItemId)\n- Ctrl+z → undo(um)\n- Ctrl+Shift+z → redo(um)\n- Ctrl+ArrowUp → moveItemUp(state, um, cursorItemId)\n- Ctrl+ArrowDown → moveItemDown(state, um, cursorItemId)\n\nKey constraints:\n- preventDefault() on Tab, Space, and Shift+Tab to block browser defaults\n- Read state.editingItemId imperatively inside the handler (MobX observable, but handler runs outside React render — just read the value directly, no autorun needed)\n- Guard all API calls on cursorItemId being non-null\n- The hook is called from App.tsx, not from individual item components\n- archiveItem on Backspace: only when the cursor item's content is empty string",
+      "estimate": "40m",
+      "files": [
+        "src/ui/useKeyboardHandler.ts",
+        "src/ui/App.tsx"
+      ],
+      "verify": "pnpm typecheck && pnpm test",
+      "inputs": [
+        "`src/core/api.ts` — all navigation API functions: moveCursorUp/Down, insertBelow/Above, indentItem, outdentItem, moveItemUp/Down, toggleComplete, toggleCollapse, archiveItem, startEditing, undo, redo",
+        "`src/ui/context.ts` — useAppState() hook providing state and undoManager",
+        "`src/ui/App.tsx` — from T01, renders OutlineView with context provider"
+      ],
+      "expected_output": [
+        "`src/ui/useKeyboardHandler.ts` — custom hook with document keydown listener, full navigation-mode shortcut map, proper useEffect cleanup",
+        "`src/ui/App.tsx` — updated to call useKeyboardHandler()"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M001",
+      "slice_id": "S02",
+      "id": "T03",
+      "title": "Add inline edit mode to OutlineItemRow with Enter/Esc/blur commit flow and 7 tests",
+      "status": "complete",
+      "one_liner": "Add inline edit mode to OutlineItemRow with Enter/Esc/blur commit flow and 7 tests",
+      "narrative": "Updated OutlineItemRow to conditionally render an input when editingItemId matches. The input auto-focuses via ref callback, tracks content in local state, and handles three commit paths: Escape (commit+stop), Enter (commit+stop+insertBelow+startEditing), and blur (commit+stop with double-commit guard). The keyboard handler already bailed early in edit mode from T02, so no changes were needed there. Added 7 tests covering all edit mode behaviors.",
+      "verification_result": "Ran pnpm typecheck (tsc --noEmit) — clean, zero errors. Ran pnpm test (vitest run) — all 81 tests pass (74 existing + 7 new edit mode tests).",
+      "duration": "",
+      "completed_at": "2026-03-26T03:03:12.044Z",
+      "blocker_discovered": false,
+      "deviations": "None. useKeyboardHandler.ts already had the edit-mode bail-out from T02.",
+      "known_issues": "None.",
+      "key_files": [
+        "src/ui/OutlineItemRow.tsx",
+        "src/ui/OutlineItemRow.test.tsx"
+      ],
+      "key_decisions": [
+        "Used ref callback (not useEffect) for auto-focus — simpler lifecycle, fires exactly when the input mounts",
+        "Guard blur handler with editingItemId check to prevent double-commit after Escape/Enter already committed"
+      ],
+      "full_summary_md": "---\nid: T03\nparent: S02\nmilestone: M001\nkey_files:\n  - src/ui/OutlineItemRow.tsx\n  - src/ui/OutlineItemRow.test.tsx\nkey_decisions:\n  - Used ref callback (not useEffect) for auto-focus — simpler lifecycle, fires exactly when the input mounts\n  - Guard blur handler with editingItemId check to prevent double-commit after Escape/Enter already committed\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-26T03:03:12.047Z\nblocker_discovered: false\n---\n\n# T03: Add inline edit mode to OutlineItemRow with Enter/Esc/blur commit flow and 7 tests\n\n**Add inline edit mode to OutlineItemRow with Enter/Esc/blur commit flow and 7 tests**\n\n## What Happened\n\nUpdated OutlineItemRow to conditionally render an input when editingItemId matches. The input auto-focuses via ref callback, tracks content in local state, and handles three commit paths: Escape (commit+stop), Enter (commit+stop+insertBelow+startEditing), and blur (commit+stop with double-commit guard). The keyboard handler already bailed early in edit mode from T02, so no changes were needed there. Added 7 tests covering all edit mode behaviors.\n\n## Verification\n\nRan pnpm typecheck (tsc --noEmit) — clean, zero errors. Ran pnpm test (vitest run) — all 81 tests pass (74 existing + 7 new edit mode tests).\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `npx tsc --noEmit` | 0 | ✅ pass | 3600ms |\n| 2 | `npx vitest run` | 0 | ✅ pass | 3000ms |\n\n\n## Deviations\n\nNone. useKeyboardHandler.ts already had the edit-mode bail-out from T02.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `src/ui/OutlineItemRow.tsx`\n- `src/ui/OutlineItemRow.test.tsx`\n",
+      "description": "Add edit mode to OutlineItemRow and update the keyboard handler to handle edit-mode keys. This task closes R004 (inline editing).\n\nWhen state.editingItemId matches the item's ID, OutlineItemRow renders an <input> instead of static text. The input:\n- Auto-focuses on mount (use ref callback: ref={el => el?.focus()})\n- Tracks value in local React state (useState), initialized from item.content\n- On Escape: commit content via setContent(state, um, itemId, localValue), then stopEditing(state, um)\n- On Enter: commit content, stopEditing, then insertBelow(state, um, itemId) + startEditing(state, um, newId) — creating a new item below in edit mode\n- On blur: commit content, stopEditing — handles clicking away\n\nThe keyboard handler (useKeyboardHandler) needs edit-mode awareness:\n- When editingItemId is non-null, the handler should NOT intercept regular keys (they go to the input)\n- Only intercept Escape and Enter in edit mode (they trigger the commit flow above)\n- Actually, Escape and Enter are handled by the input's onKeyDown, not the document handler — the document handler just needs to bail early when editingItemId is non-null\n\nKey constraints:\n- Content commit is a single undo group: setContent + stopEditing in one withGroup, or done as separate calls (setContent already wraps in withGroup, stopEditing does too — this is fine, they'll be separate undo entries but that's acceptable for S02)\n- Enter in edit mode must: (1) save current content, (2) stop editing, (3) insert new item below, (4) start editing new item. The new item ID comes from insertBelow's return value.\n- Ctrl+Z while editing should be allowed through to the input (browser undo for text) — the document handler already bails when editingItemId is set, so this works naturally\n- The input should have no border/background to look inline (minimal styling — full design is S03)",
+      "estimate": "40m",
+      "files": [
+        "src/ui/OutlineItemRow.tsx",
+        "src/ui/useKeyboardHandler.ts"
+      ],
+      "verify": "pnpm typecheck && pnpm test",
+      "inputs": [
+        "`src/ui/OutlineItemRow.tsx` — from T01, currently renders static content text",
+        "`src/ui/useKeyboardHandler.ts` — from T02, handles navigation-mode keys",
+        "`src/core/api.ts` — setContent, startEditing, stopEditing, insertBelow",
+        "`src/ui/context.ts` — useAppState() hook"
+      ],
+      "expected_output": [
+        "`src/ui/OutlineItemRow.tsx` — updated with conditional input rendering, auto-focus, Enter/Esc/blur handlers, local value state",
+        "`src/ui/useKeyboardHandler.ts` — updated to skip navigation shortcuts when editingItemId is non-null"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M001",
+      "slice_id": "S03",
+      "id": "T01",
+      "title": "Added Tailwind v4 @theme design tokens (colors, fonts) and Google Fonts CDN links for IBM Plex Sans, Space Grotesk, JetBrains Mono",
+      "status": "complete",
+      "one_liner": "Added Tailwind v4 @theme design tokens (colors, fonts) and Google Fonts CDN links for IBM Plex Sans, Space Grotesk, JetBrains Mono",
+      "narrative": "Created the design system foundation in two files. src/global.css got a @theme block with 8 color tokens (bg, surface, border, text-primary, text-secondary, amber, amber-light, amber-dark) and 3 font-family tokens (body, heading, mono). index.html got preconnect hints and a Google Fonts stylesheet loading IBM Plex Sans, Space Grotesk, and JetBrains Mono with appropriate weights. All tokens are now available as Tailwind utility classes for downstream tasks.",
+      "verification_result": "Ran pnpm typecheck (tsc --noEmit) — passed with zero errors. Ran pnpm test (vitest run) — all 81 tests across 3 test files passed. No regressions from CSS-only and HTML-only changes.",
+      "duration": "",
+      "completed_at": "2026-03-26T03:13:41.897Z",
+      "blocker_discovered": false,
+      "deviations": "None.",
+      "known_issues": "None.",
+      "key_files": [
+        "src/global.css",
+        "index.html"
+      ],
+      "key_decisions": [
+        "Used hex colors in @theme rather than oklch for exact design spec match",
+        "Included italic weight for IBM Plex Sans (400i) for potential emphasis text"
+      ],
+      "full_summary_md": "---\nid: T01\nparent: S03\nmilestone: M001\nkey_files:\n  - src/global.css\n  - index.html\nkey_decisions:\n  - Used hex colors in @theme rather than oklch for exact design spec match\n  - Included italic weight for IBM Plex Sans (400i) for potential emphasis text\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-26T03:13:41.900Z\nblocker_discovered: false\n---\n\n# T01: Added Tailwind v4 @theme design tokens (colors, fonts) and Google Fonts CDN links for IBM Plex Sans, Space Grotesk, JetBrains Mono\n\n**Added Tailwind v4 @theme design tokens (colors, fonts) and Google Fonts CDN links for IBM Plex Sans, Space Grotesk, JetBrains Mono**\n\n## What Happened\n\nCreated the design system foundation in two files. src/global.css got a @theme block with 8 color tokens (bg, surface, border, text-primary, text-secondary, amber, amber-light, amber-dark) and 3 font-family tokens (body, heading, mono). index.html got preconnect hints and a Google Fonts stylesheet loading IBM Plex Sans, Space Grotesk, and JetBrains Mono with appropriate weights. All tokens are now available as Tailwind utility classes for downstream tasks.\n\n## Verification\n\nRan pnpm typecheck (tsc --noEmit) — passed with zero errors. Ran pnpm test (vitest run) — all 81 tests across 3 test files passed. No regressions from CSS-only and HTML-only changes.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `pnpm typecheck` | 0 | ✅ pass | 3500ms |\n| 2 | `pnpm test` | 0 | ✅ pass | 3500ms |\n\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `src/global.css`\n- `index.html`\n",
+      "description": "Establish the complete design system foundation: Tailwind v4 @theme tokens in global.css and Google Fonts CDN links in index.html. Every subsequent task depends on these tokens being available as Tailwind utilities.\n\nThe design spec defines: dark background #0c0c0e, surface #1a1a1e, border #2a2a2e, text primary #e8e6e3, text secondary #a0a0a0, amber accent #e5a832 with lighter/darker shades. Three font families: IBM Plex Sans (body), Space Grotesk (headings/logo), JetBrains Mono (code/status).\n\nTailwind v4 uses @theme directive in CSS — no tailwind.config.js. Color tokens must use --color-* prefix, font tokens must use --font-* prefix.",
+      "estimate": "20m",
+      "files": [
+        "src/global.css",
+        "index.html"
+      ],
+      "verify": "pnpm typecheck && pnpm test",
+      "inputs": [
+        "`src/global.css` — existing file with only `@import \"tailwindcss\"`",
+        "`index.html` — needs Google Fonts <link> tags added to <head>"
+      ],
+      "expected_output": [
+        "`src/global.css` — @theme block with full color palette and font-family tokens",
+        "`index.html` — Google Fonts CDN links for IBM Plex Sans, Space Grotesk, JetBrains Mono"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M001",
+      "slice_id": "S03",
+      "id": "T02",
+      "title": "Built three-zone layout shell with fixed Topbar (Space Grotesk logo, search/nav placeholders) and MobX-observed StatusBar (mode indicator, item counts, keyboard hints)",
+      "status": "complete",
+      "one_liner": "Built three-zone layout shell with fixed Topbar (Space Grotesk logo, search/nav placeholders) and MobX-observed StatusBar (mode indicator, item counts, keyboard hints)",
+      "narrative": "Created Topbar.tsx with Space Grotesk amber logo, disabled search input with / kbd hint, disabled Due/Tags/Lists nav links, help button, and avatar placeholder. Created StatusBar.tsx as a MobX observer reading editingItemId for NAVIGATE/EDIT mode, iterating items.values() for non-archived and completed counts, and showing contextual shortcut hints. Restructured App.tsx into fixed topbar → scrollable 900px-centered content area → fixed status bar, preserving all existing logic unchanged.",
+      "verification_result": "pnpm typecheck passed (tsc --noEmit, zero errors). pnpm test passed (81/81 tests across 3 files). No regressions from layout restructuring.",
+      "duration": "",
+      "completed_at": "2026-03-26T03:15:21.818Z",
+      "blocker_discovered": false,
+      "deviations": "None.",
+      "known_issues": "None.",
+      "key_files": [
+        "src/ui/Topbar.tsx",
+        "src/ui/StatusBar.tsx",
+        "src/ui/App.tsx"
+      ],
+      "key_decisions": [
+        "Used z-20 for both fixed bars to stay above content without conflicting with future modals",
+        "StatusBar derives counts inline via items.values() iteration — no computed getters added to AppState",
+        "Topbar search input and nav links are disabled placeholders — no event handlers wired"
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S03\nmilestone: M001\nkey_files:\n  - src/ui/Topbar.tsx\n  - src/ui/StatusBar.tsx\n  - src/ui/App.tsx\nkey_decisions:\n  - Used z-20 for both fixed bars to stay above content without conflicting with future modals\n  - StatusBar derives counts inline via items.values() iteration — no computed getters added to AppState\n  - Topbar search input and nav links are disabled placeholders — no event handlers wired\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-26T03:15:21.824Z\nblocker_discovered: false\n---\n\n# T02: Built three-zone layout shell with fixed Topbar (Space Grotesk logo, search/nav placeholders) and MobX-observed StatusBar (mode indicator, item counts, keyboard hints)\n\n**Built three-zone layout shell with fixed Topbar (Space Grotesk logo, search/nav placeholders) and MobX-observed StatusBar (mode indicator, item counts, keyboard hints)**\n\n## What Happened\n\nCreated Topbar.tsx with Space Grotesk amber logo, disabled search input with / kbd hint, disabled Due/Tags/Lists nav links, help button, and avatar placeholder. Created StatusBar.tsx as a MobX observer reading editingItemId for NAVIGATE/EDIT mode, iterating items.values() for non-archived and completed counts, and showing contextual shortcut hints. Restructured App.tsx into fixed topbar → scrollable 900px-centered content area → fixed status bar, preserving all existing logic unchanged.\n\n## Verification\n\npnpm typecheck passed (tsc --noEmit, zero errors). pnpm test passed (81/81 tests across 3 files). No regressions from layout restructuring.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `pnpm typecheck` | 0 | ✅ pass | 3400ms |\n| 2 | `pnpm test` | 0 | ✅ pass | 3400ms |\n\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `src/ui/Topbar.tsx`\n- `src/ui/StatusBar.tsx`\n- `src/ui/App.tsx`\n",
+      "description": "Create the two new layout components (Topbar, StatusBar) and restructure App.tsx into a three-zone layout: fixed topbar, scrollable content area with padding offsets, fixed bottom status bar.\n\n**Topbar.tsx**: Space Grotesk logo text with amber accent, search placeholder input with / hint (non-functional), disabled Due/Tags/Lists nav links, help button (? icon), avatar placeholder circle. Fixed at top with z-10+.\n\n**StatusBar.tsx**: MobX observer component. Fixed bottom bar with JetBrains Mono font. Shows: mode indicator reading state.editingItemId (non-null = 'EDIT', null = 'NAVIGATE'), total non-archived item count via iterating state.items.values(), completed count, and contextual shortcut hints (e.g. 'j/k navigate • o insert • Enter edit'). Derive counts inline — AppState has no count methods. MobX tracks the iteration automatically.\n\n**App.tsx**: Restructure from bare div wrapper to: fixed Topbar at top → main content area with top/bottom padding to clear fixed bars → fixed StatusBar at bottom. Keep KeyboardHandlerHost, OutlineProvider, and seed logic unchanged.\n\nThis task closes R009 (status bar) and R010 (topbar).",
+      "estimate": "45m",
+      "files": [
+        "src/ui/Topbar.tsx",
+        "src/ui/StatusBar.tsx",
+        "src/ui/App.tsx"
+      ],
+      "verify": "pnpm typecheck && pnpm test",
+      "inputs": [
+        "`src/ui/App.tsx` — current bare div layout to restructure",
+        "`src/ui/context.ts` — useAppState() hook for StatusBar to read state",
+        "`src/core/model.ts` — AppState shape (items, cursorItemId, editingItemId)",
+        "`src/global.css` — design tokens from T01"
+      ],
+      "expected_output": [
+        "`src/ui/Topbar.tsx` — new fixed topbar component with logo, search, nav placeholders",
+        "`src/ui/StatusBar.tsx` — new fixed status bar component showing mode, counts, hints",
+        "`src/ui/App.tsx` — restructured three-zone layout composing Topbar, content, StatusBar"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M001",
+      "slice_id": "S03",
+      "id": "T03",
+      "title": "Applied full design theme to OutlineItemRow (amber selection border, SVG chevrons/checkboxes, edit input glow) and OutlineView (centered 900px body-font container)",
+      "status": "complete",
+      "one_liner": "Applied full design theme to OutlineItemRow (amber selection border, SVG chevrons/checkboxes, edit input glow) and OutlineView (centered 900px body-font container)",
+      "narrative": "Restyled OutlineView to use font-body text-base with a centered max-w-[900px] px-6 container. OutlineItemRow received CSS-only changes: indent 26px, min-h-[36px], amber border-l-2 selection, inline SVG chevrons and checkboxes, amber border+glow edit input, text-text-secondary on completed items. Updated one test assertion to match new edit input classes.",
+      "verification_result": "pnpm typecheck — 0 errors. pnpm test — 81/81 tests pass including updated edit input style assertion.",
+      "duration": "",
+      "completed_at": "2026-03-26T03:17:24.990Z",
+      "blocker_discovered": false,
+      "deviations": "Updated src/ui/OutlineItemRow.test.tsx to reflect new themed edit input classes — necessary to keep tests green after border-none → border border-amber change.",
+      "known_issues": "None.",
+      "key_files": [
+        "src/ui/OutlineItemRow.tsx",
+        "src/ui/OutlineView.tsx",
+        "src/ui/OutlineItemRow.test.tsx"
+      ],
+      "key_decisions": [
+        "Used border-l-2 with border-transparent on non-selected rows to prevent layout shift on selection change",
+        "Inline SVG icons sized to match surrounding elements rather than importing an icon library"
+      ],
+      "full_summary_md": "---\nid: T03\nparent: S03\nmilestone: M001\nkey_files:\n  - src/ui/OutlineItemRow.tsx\n  - src/ui/OutlineView.tsx\n  - src/ui/OutlineItemRow.test.tsx\nkey_decisions:\n  - Used border-l-2 with border-transparent on non-selected rows to prevent layout shift on selection change\n  - Inline SVG icons sized to match surrounding elements rather than importing an icon library\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-26T03:17:24.996Z\nblocker_discovered: false\n---\n\n# T03: Applied full design theme to OutlineItemRow (amber selection border, SVG chevrons/checkboxes, edit input glow) and OutlineView (centered 900px body-font container)\n\n**Applied full design theme to OutlineItemRow (amber selection border, SVG chevrons/checkboxes, edit input glow) and OutlineView (centered 900px body-font container)**\n\n## What Happened\n\nRestyled OutlineView to use font-body text-base with a centered max-w-[900px] px-6 container. OutlineItemRow received CSS-only changes: indent 26px, min-h-[36px], amber border-l-2 selection, inline SVG chevrons and checkboxes, amber border+glow edit input, text-text-secondary on completed items. Updated one test assertion to match new edit input classes.\n\n## Verification\n\npnpm typecheck — 0 errors. pnpm test — 81/81 tests pass including updated edit input style assertion.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `pnpm typecheck` | 0 | ✅ pass | 4100ms |\n| 2 | `pnpm test` | 0 | ✅ pass | 5400ms |\n\n\n## Deviations\n\nUpdated src/ui/OutlineItemRow.test.tsx to reflect new themed edit input classes — necessary to keep tests green after border-none → border border-amber change.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `src/ui/OutlineItemRow.tsx`\n- `src/ui/OutlineView.tsx`\n- `src/ui/OutlineItemRow.test.tsx`\n",
+      "description": "Apply the full design theme to OutlineItemRow.tsx and OutlineView.tsx. This is the highest-touch visual task — most design detail lives in item rendering.\n\n**OutlineView.tsx**: Replace font-mono text-sm with body font (font-body), proper text size (text-base / 16px). Wrap items in a centered max-w-[900px] container with appropriate horizontal padding.\n\n**OutlineItemRow.tsx changes**:\n- Indent: change from `depth * 24` to `depth * 26` per design spec\n- Row height: add min-h-[36px] for 36px minimum height\n- Selection highlight: replace bg-white/10 with amber left border (border-l-2 border-amber) + subtle amber background (bg-amber/5 or similar) when isCursor is true\n- Collapse chevrons: replace text ▶/▼ with proper SVG chevron icons (inline SVG, right-pointing and down-pointing), sized to match checkboxes\n- Checkboxes: replace ☑/☐ text with styled checkbox elements — amber fill when completed, muted border when unchecked\n- Edit input: add amber border + glow effect (border-amber + ring/box-shadow with amber color) instead of bare outline-none. Same font as body text.\n- Completed items: line-through with reduced opacity (already exists, verify it uses theme colors)\n- Empty state text: use theme text-secondary color\n\nAll changes are CSS/className only — no behavioral changes. The data-testid='inline-edit-input' attribute and all event handlers must remain untouched to keep existing tests passing.",
+      "estimate": "45m",
+      "files": [
+        "src/ui/OutlineItemRow.tsx",
+        "src/ui/OutlineView.tsx"
+      ],
+      "verify": "pnpm typecheck && pnpm test",
+      "inputs": [
+        "`src/ui/OutlineItemRow.tsx` — existing functional component to restyle",
+        "`src/ui/OutlineView.tsx` — existing list container to restyle",
+        "`src/global.css` — design tokens from T01"
+      ],
+      "expected_output": [
+        "`src/ui/OutlineItemRow.tsx` — fully themed item rows with amber selection, styled chevrons/checkboxes, edit glow",
+        "`src/ui/OutlineView.tsx` — centered ~900px content area with body font"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M001",
+      "slice_id": "S04",
+      "id": "T01",
+      "title": "Created IndexedDB persistence module with save/load/export, switched to UUID IDs, and fixed all tests across 4 files",
+      "status": "complete",
+      "one_liner": "Created IndexedDB persistence module with save/load/export, switched to UUID IDs, and fixed all tests across 4 files",
+      "narrative": "Created src/core/persistence.ts with openDB, saveState, loadState, applyLoadedSnapshot, and exportStateAsJSON using the idb wrapper. Switched generateId() from sequential item-N to crypto.randomUUID() and removed _resetIdCounter. Fixed cascading test breakage across api.test.ts, useKeyboardHandler.test.tsx, and OutlineItemRow.test.tsx — removing _resetIdCounter references and replacing 7 hardcoded item-N ID assertions with dynamic ID usage. Created persistence.test.ts with 6 tests covering round-trip, empty DB, and JSON export. Installed fake-indexeddb as dev dependency.",
+      "verification_result": "Ran pnpm test — all 87 tests pass (60 api, 6 persistence, 14 keyboard, 7 outline row). Ran pnpm typecheck — zero type errors.",
+      "duration": "",
+      "completed_at": "2026-03-26T03:29:52.395Z",
+      "blocker_discovered": false,
+      "deviations": "Had to fix _resetIdCounter references and hardcoded item-N ID assertions in useKeyboardHandler.test.tsx and OutlineItemRow.test.tsx — not mentioned in plan but direct consequence of removing _resetIdCounter.",
+      "known_issues": "None.",
+      "key_files": [
+        "src/core/persistence.ts",
+        "src/core/persistence.test.ts",
+        "src/core/api.ts",
+        "src/core/api.test.ts",
+        "src/ui/useKeyboardHandler.test.tsx",
+        "src/ui/OutlineItemRow.test.tsx",
+        "package.json"
+      ],
+      "key_decisions": [
+        "Switched from sequential item-N IDs to crypto.randomUUID() for collision-free IDs across sessions",
+        "Used idb wrapper with typed DBSchema for type-safe IndexedDB access",
+        "Persistence stores full mobx-keystone snapshot under a single key for simplicity"
+      ],
+      "full_summary_md": "---\nid: T01\nparent: S04\nmilestone: M001\nkey_files:\n  - src/core/persistence.ts\n  - src/core/persistence.test.ts\n  - src/core/api.ts\n  - src/core/api.test.ts\n  - src/ui/useKeyboardHandler.test.tsx\n  - src/ui/OutlineItemRow.test.tsx\n  - package.json\nkey_decisions:\n  - Switched from sequential item-N IDs to crypto.randomUUID() for collision-free IDs across sessions\n  - Used idb wrapper with typed DBSchema for type-safe IndexedDB access\n  - Persistence stores full mobx-keystone snapshot under a single key for simplicity\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-26T03:29:52.401Z\nblocker_discovered: false\n---\n\n# T01: Created IndexedDB persistence module with save/load/export, switched to UUID IDs, and fixed all tests across 4 files\n\n**Created IndexedDB persistence module with save/load/export, switched to UUID IDs, and fixed all tests across 4 files**\n\n## What Happened\n\nCreated src/core/persistence.ts with openDB, saveState, loadState, applyLoadedSnapshot, and exportStateAsJSON using the idb wrapper. Switched generateId() from sequential item-N to crypto.randomUUID() and removed _resetIdCounter. Fixed cascading test breakage across api.test.ts, useKeyboardHandler.test.tsx, and OutlineItemRow.test.tsx — removing _resetIdCounter references and replacing 7 hardcoded item-N ID assertions with dynamic ID usage. Created persistence.test.ts with 6 tests covering round-trip, empty DB, and JSON export. Installed fake-indexeddb as dev dependency.\n\n## Verification\n\nRan pnpm test — all 87 tests pass (60 api, 6 persistence, 14 keyboard, 7 outline row). Ran pnpm typecheck — zero type errors.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `pnpm test` | 0 | ✅ pass | 3270ms |\n| 2 | `pnpm typecheck` | 0 | ✅ pass | 3800ms |\n\n\n## Deviations\n\nHad to fix _resetIdCounter references and hardcoded item-N ID assertions in useKeyboardHandler.test.tsx and OutlineItemRow.test.tsx — not mentioned in plan but direct consequence of removing _resetIdCounter.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `src/core/persistence.ts`\n- `src/core/persistence.test.ts`\n- `src/core/api.ts`\n- `src/core/api.test.ts`\n- `src/ui/useKeyboardHandler.test.tsx`\n- `src/ui/OutlineItemRow.test.tsx`\n- `package.json`\n",
+      "description": "Create `src/core/persistence.ts` with IndexedDB open/save/load using the `idb` package (already installed). Switch `generateId()` from sequential `item-N` to `crypto.randomUUID()` to prevent ID collisions after reload. Fix the one test assertion in `api.test.ts` that checks `toBe('item-1')`. Install `fake-indexeddb` as dev dependency and write persistence round-trip tests.\n\nThis is the foundation — auto-save, loading, and export all depend on this module working correctly.",
+      "estimate": "45m",
+      "files": [
+        "src/core/persistence.ts",
+        "src/core/persistence.test.ts",
+        "src/core/api.ts",
+        "src/core/api.test.ts",
+        "package.json"
+      ],
+      "verify": "pnpm test && pnpm typecheck",
+      "inputs": [
+        "`src/core/api.ts` — contains `generateId()` and `createAppState()` that need modification",
+        "`src/core/model.ts` — AppState and OutlineItem models (read-only, needed for snapshot types)",
+        "`src/core/api.test.ts` — has one `toBe('item-1')` assertion to fix",
+        "`package.json` — needs `fake-indexeddb` added as dev dependency"
+      ],
+      "expected_output": [
+        "`src/core/persistence.ts` — new module with openDB, saveState, loadState functions using idb wrapper",
+        "`src/core/persistence.test.ts` — round-trip tests: save snapshot → load → compare; load from empty DB returns null; error handling",
+        "`src/core/api.ts` — generateId switched to crypto.randomUUID(), _resetIdCounter removed or made no-op",
+        "`src/core/api.test.ts` — fixed toBe('item-1') assertion to not assert literal ID string",
+        "`package.json` — fake-indexeddb added to devDependencies"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M001",
+      "slice_id": "S04",
+      "id": "T02",
+      "title": "Wired async App bootstrap with IDB loading, debounced auto-save, and rich demo seed for first-time users",
+      "status": "complete",
+      "one_liner": "Wired async App bootstrap with IDB loading, debounced auto-save, and rich demo seed for first-time users",
+      "narrative": "Added loadAppState(snapshot) to api.ts using fromSnapshot for clean hydration from saved snapshots. Rewrote App.tsx from synchronous useMemo to async useEffect bootstrap: loads from IDB, falls back to demo seed on empty/error, shows loading spinner, then wires onSnapshot with 2s debounced auto-save. Demo seed creates a multi-level outline with keyboard shortcut hints. Added 3 new persistence tests for the hydration path.",
+      "verification_result": "Ran pnpm test — all 90 tests pass (60 api, 9 persistence, 14 keyboard, 7 outline row). Ran pnpm typecheck — zero type errors.",
+      "duration": "",
+      "completed_at": "2026-03-26T03:33:25.407Z",
+      "blocker_discovered": false,
+      "deviations": "None.",
+      "known_issues": "None.",
+      "key_files": [
+        "src/ui/App.tsx",
+        "src/core/api.ts",
+        "src/core/persistence.test.ts"
+      ],
+      "key_decisions": [
+        "Used fromSnapshot<AppState> for hydration instead of applySnapshot — creates fresh tree cleanly supporting registerRootStore",
+        "Wired onSnapshot listener AFTER bootstrap to prevent re-saving during load",
+        "Rich demo seed with keyboard shortcut hints under Welcome and Try-it-out sections"
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S04\nmilestone: M001\nkey_files:\n  - src/ui/App.tsx\n  - src/core/api.ts\n  - src/core/persistence.test.ts\nkey_decisions:\n  - Used fromSnapshot<AppState> for hydration instead of applySnapshot — creates fresh tree cleanly supporting registerRootStore\n  - Wired onSnapshot listener AFTER bootstrap to prevent re-saving during load\n  - Rich demo seed with keyboard shortcut hints under Welcome and Try-it-out sections\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-26T03:33:25.413Z\nblocker_discovered: false\n---\n\n# T02: Wired async App bootstrap with IDB loading, debounced auto-save, and rich demo seed for first-time users\n\n**Wired async App bootstrap with IDB loading, debounced auto-save, and rich demo seed for first-time users**\n\n## What Happened\n\nAdded loadAppState(snapshot) to api.ts using fromSnapshot for clean hydration from saved snapshots. Rewrote App.tsx from synchronous useMemo to async useEffect bootstrap: loads from IDB, falls back to demo seed on empty/error, shows loading spinner, then wires onSnapshot with 2s debounced auto-save. Demo seed creates a multi-level outline with keyboard shortcut hints. Added 3 new persistence tests for the hydration path.\n\n## Verification\n\nRan pnpm test — all 90 tests pass (60 api, 9 persistence, 14 keyboard, 7 outline row). Ran pnpm typecheck — zero type errors.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `pnpm test` | 0 | ✅ pass | 3480ms |\n| 2 | `pnpm typecheck` | 0 | ✅ pass | 4200ms |\n\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `src/ui/App.tsx`\n- `src/core/api.ts`\n- `src/core/persistence.test.ts`\n",
+      "description": "Restructure `App.tsx` to load state from IndexedDB on mount (async), seed a rich demo list if IDB is empty (first-run experience), and wire `onSnapshot` with debounced auto-save (~2s). The demo seed should be a multi-level welcome outline with keyboard shortcut hints.\n\nKey constraints:\n- Show a loading state while IDB loads\n- Attach `onSnapshot` listener AFTER initial load completes (prevents re-saving during load)\n- Call `registerRootStore` + `setupUndo` on the loaded state, then `clearUndo()` so load isn't undoable\n- Handle IDB load errors gracefully — fall back to demo seed with console.warn\n- The `fromSnapshot<AppState>()` call needs the snapshot to include `$modelType` metadata\n\nThis task delivers R007 (auto-save / data survives refresh).",
+      "estimate": "1h",
+      "files": [
+        "src/ui/App.tsx",
+        "src/core/api.ts",
+        "src/core/persistence.ts",
+        "src/core/persistence.test.ts"
+      ],
+      "verify": "pnpm test && pnpm typecheck",
+      "inputs": [
+        "`src/core/persistence.ts` — saveState/loadState functions from T01",
+        "`src/core/api.ts` — createAppState, setupUndo, and other API functions",
+        "`src/core/model.ts` — AppState model for fromSnapshot usage",
+        "`src/ui/App.tsx` — current synchronous bootstrap to restructure"
+      ],
+      "expected_output": [
+        "`src/ui/App.tsx` — async bootstrap: load from IDB → seed if empty → render. onSnapshot auto-save wired with ~2s debounce. Loading state shown during IDB load.",
+        "`src/core/api.ts` — new `loadAppState(snapshot)` function that calls fromSnapshot + registerRootStore + setupUndo",
+        "`src/core/persistence.ts` — possible additions for snapshot type helpers if needed",
+        "`src/core/persistence.test.ts` — additional tests for auto-save debounce behavior and demo seed on empty DB"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M001",
+      "slice_id": "S04",
+      "id": "T03",
+      "title": "Added downloadExportJson to persistence.ts and wired an Export button with download icon in the Topbar — all 91 tests pass, zero type errors",
+      "status": "complete",
+      "one_liner": "Added downloadExportJson to persistence.ts and wired an Export button with download icon in the Topbar — all 91 tests pass, zero type errors",
+      "narrative": "Added downloadExportJson(state) to persistence.ts that creates a JSON Blob from exportStateAsJSON, generates a createObjectURL, and triggers a download via a hidden anchor element. The filename follows the pattern vistanest-export-YYYY-MM-DD.json. Wired an Export button with an SVG download icon in Topbar.tsx, placed next to the Help button, using useAppState from context to access the state. Added a comprehensive unit test for the download function that spies on createElement, createObjectURL, revokeObjectURL, anchor click, and DOM cleanup.",
+      "verification_result": "Ran pnpm test — all 91 tests pass (10 persistence including the new downloadExportJson test, 60 api, 14 keyboard, 7 outline row). Ran pnpm typecheck — zero type errors.",
+      "duration": "",
+      "completed_at": "2026-03-26T03:35:27.482Z",
+      "blocker_discovered": false,
+      "deviations": "None.",
+      "known_issues": "None.",
+      "key_files": [
+        "src/core/persistence.ts",
+        "src/core/persistence.test.ts",
+        "src/ui/Topbar.tsx"
+      ],
+      "key_decisions": [
+        "Export uses Blob + createObjectURL + hidden anchor pattern for widest browser compatibility"
+      ],
+      "full_summary_md": "---\nid: T03\nparent: S04\nmilestone: M001\nkey_files:\n  - src/core/persistence.ts\n  - src/core/persistence.test.ts\n  - src/ui/Topbar.tsx\nkey_decisions:\n  - Export uses Blob + createObjectURL + hidden anchor pattern for widest browser compatibility\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-26T03:35:27.487Z\nblocker_discovered: false\n---\n\n# T03: Added downloadExportJson to persistence.ts and wired an Export button with download icon in the Topbar — all 91 tests pass, zero type errors\n\n**Added downloadExportJson to persistence.ts and wired an Export button with download icon in the Topbar — all 91 tests pass, zero type errors**\n\n## What Happened\n\nAdded downloadExportJson(state) to persistence.ts that creates a JSON Blob from exportStateAsJSON, generates a createObjectURL, and triggers a download via a hidden anchor element. The filename follows the pattern vistanest-export-YYYY-MM-DD.json. Wired an Export button with an SVG download icon in Topbar.tsx, placed next to the Help button, using useAppState from context to access the state. Added a comprehensive unit test for the download function that spies on createElement, createObjectURL, revokeObjectURL, anchor click, and DOM cleanup.\n\n## Verification\n\nRan pnpm test — all 91 tests pass (10 persistence including the new downloadExportJson test, 60 api, 14 keyboard, 7 outline row). Ran pnpm typecheck — zero type errors.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `pnpm test` | 0 | ✅ pass | 7500ms |\n| 2 | `pnpm typecheck` | 0 | ✅ pass | 4300ms |\n\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `src/core/persistence.ts`\n- `src/core/persistence.test.ts`\n- `src/ui/Topbar.tsx`\n",
+      "description": "Add an `exportJson` function to `persistence.ts` that creates a JSON Blob from `getSnapshot(state)` and triggers a browser download. Wire it to an Export button in the Topbar. Write a unit test for the export function.\n\nThis task delivers R008 (JSON export).\n\nThe export button should:\n- Be placed in the Topbar next to the help button\n- Use a download icon or text label\n- Call `getSnapshot(state)` → JSON.stringify → Blob → URL.createObjectURL → click hidden anchor\n- File name: `vistanest-export-{ISO date}.json`\n\nFinal verification: run full test suite and typecheck to confirm all existing + new tests pass.",
+      "estimate": "30m",
+      "files": [
+        "src/core/persistence.ts",
+        "src/core/persistence.test.ts",
+        "src/ui/Topbar.tsx",
+        "src/ui/context.ts"
+      ],
+      "verify": "pnpm test && pnpm typecheck",
+      "inputs": [
+        "`src/core/persistence.ts` — add exportJson function here",
+        "`src/ui/Topbar.tsx` — add Export button",
+        "`src/ui/context.ts` — useAppState hook for accessing state in Topbar",
+        "`src/core/model.ts` — AppState type for getSnapshot"
+      ],
+      "expected_output": [
+        "`src/core/persistence.ts` — exportJson function added",
+        "`src/core/persistence.test.ts` — test for exportJson producing valid JSON matching snapshot structure",
+        "`src/ui/Topbar.tsx` — Export button wired to exportJson via context"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    }
+  ],
+  "decisions": [
+    {
+      "seq": 5,
+      "id": "D001",
+      "when_context": "M001",
+      "scope": "data",
+      "decision": "Persistence strategy",
+      "choice": "IndexedDB via idb wrapper with debounced auto-save using Keystone onSnapshot",
+      "rationale": "Local-first, no server dependency. User never loses work.",
+      "revisable": "Yes — if sync is added in future",
+      "made_by": "human",
+      "superseded_by": null
+    },
+    {
+      "seq": 6,
+      "id": "D002",
+      "when_context": "M001",
+      "scope": "arch",
+      "decision": "State management library",
+      "choice": "MobX Keystone",
+      "rationale": "Provides snapshots, undo middleware, model actions, and tree structure out of the box. Already in deps.",
+      "revisable": "No",
+      "made_by": "human",
+      "superseded_by": null
+    },
+    {
+      "seq": 7,
+      "id": "D003",
+      "when_context": "M001/S01",
+      "scope": "data",
+      "decision": "Tree data structure: nested children array vs flat ObjectMap with parentId/sortOrder",
+      "choice": "Flat ObjectMap<OutlineItem> with parentId and sortOrder fields",
+      "rationale": "Eliminates Keystone's single-parent detach() problem entirely (tree ops become property mutations). Produces sync-friendly ID-keyed patches instead of fragile array-index patches. Proven in spike: 15 tests passing for CRUD, indent/outdent, archive+undo, cursor restore. Trade-off: getChildren/getVisibleItems are O(n) scans, but fine for hundreds of items — can add caching later if needed.",
+      "revisable": "Yes — could switch to nested if sync requirements change the calculus",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 8,
+      "id": "D004",
+      "when_context": "M001/S01",
+      "scope": "data",
+      "decision": "Archive behavior for items with children",
+      "choice": "Cascade isArchived=true to all descendants when archiving an item",
+      "rationale": "With the flat ObjectMap model, children of an archived parent would still appear in getChildren queries unless explicitly archived. Cascading ensures consistent visibility — archiving a parent hides its entire subtree. Undo reverses the cascade, restoring all descendants. Simpler than walking the parent chain in every query method.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 9,
+      "id": "D005",
+      "when_context": "M001/S01/T02",
+      "scope": "architecture",
+      "decision": "How outdentItem handles subsequent siblings of the outdented item",
+      "choice": "Re-parent subsequent siblings as children of the outdented item (standard outliner behavior)",
+      "rationale": "This matches the behavior of WorkFlowy, Dynalist, and other established outliners. When outdenting a middle child, the items after it under the same parent logically belong to the outdented item's scope. The alternative (leaving them under the old parent) would break users' spatial mental model of the outline structure.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 10,
+      "id": "D006",
+      "when_context": "M001/S01/T03",
+      "scope": "library",
+      "decision": "Sort order storage strategy for OutlineItem ordering",
+      "choice": "Use fraci (fraciString with BASE62) for fractional indexing instead of sequential integers",
+      "rationale": "Fractional indexing eliminates the need for renumberChildren after indent/outdent operations, generates keys between any two existing keys without touching other items, and is collaboration-ready. User requested it directly. The sortOrder field changed from number to string with lexicographic comparison.",
+      "revisable": "Yes",
+      "made_by": "human",
+      "superseded_by": null
+    },
+    {
+      "seq": 11,
+      "id": "D007",
+      "when_context": "M001/S01",
+      "scope": "requirement",
+      "decision": "R001 — CRUD operations on tree structure",
+      "choice": "validated",
+      "rationale": "57 passing tests prove create (insertBelow/insertAbove), read (getItem/getChildren/getVisibleItems), update (setContent), and delete/archive (archiveItem with cascade) all work correctly including undo/redo.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 16,
+      "id": "D008",
+      "when_context": "M001/S01",
+      "scope": "requirement",
+      "decision": "R013 — soft-delete via archive instead of permanent destroy",
+      "choice": "validated",
+      "rationale": "archiveItem tests prove isArchived is set (not deleted), cascade to descendants works, archived items are hidden from getVisibleItems/getChildren, and undo restores all archived descendants. Integration test exercises archive+undo in realistic workflow.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 18,
+      "id": "D009",
+      "when_context": "M001/S02",
+      "scope": "requirement",
+      "decision": "R004 — Inline editing with Enter/Esc commit flow",
+      "choice": "validated",
+      "rationale": "7 tests prove: Enter starts edit mode, Escape commits+stops editing, Enter in edit mode commits+stops+inserts new item below in edit mode, blur commits+stops editing (with double-commit guard), auto-focus on edit start, and content persistence through setContent API. All commit paths verified.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 19,
+      "id": "D010",
+      "when_context": "M001/S02",
+      "scope": "requirement",
+      "decision": "R003 — Keyboard-driven navigation and manipulation",
+      "choice": "validated",
+      "rationale": "14 keyboard handler tests prove all 16 navigation-mode shortcuts: j/k cursor movement, o/O insert+edit, Tab/Shift+Tab indent/outdent, Space complete, h/l collapse, Backspace archive-when-empty, Enter edit mode, Ctrl+Z/Shift+Z undo/redo, Ctrl+Arrow reorder. Edit-mode passthrough verified — shortcuts don't fire when editing.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 22,
+      "id": "D011",
+      "when_context": "M001/S03",
+      "scope": "requirement",
+      "decision": "R010 — Top bar with logo, search placeholder, nav placeholders",
+      "choice": "validated",
+      "rationale": "Topbar.tsx delivers: Space Grotesk amber logo, disabled search input with / kbd hint, disabled Due/Tags/Lists nav links, help button (? icon), avatar placeholder circle. All non-functional placeholders as spec requires for M001. Fixed top with z-20. 81 tests pass.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 26,
+      "id": "D012",
+      "when_context": "M001/S04",
+      "scope": "requirement",
+      "decision": "R008 — JSON file export",
+      "choice": "validated",
+      "rationale": "downloadExportJson creates a JSON Blob from getSnapshot, triggers browser download via hidden anchor with createObjectURL. Export button wired in Topbar with download icon. Unit test verifies the full download flow (createElement, createObjectURL, anchor.click, cleanup). Filename follows vistanest-export-YYYY-MM-DD.json pattern.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    }
+  ],
+  "verification_evidence": [
+    {
+      "id": 1,
+      "task_id": "T01",
+      "slice_id": "S01",
+      "milestone_id": "M001",
+      "command": "pnpm typecheck",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 2900,
+      "created_at": "2026-03-26T02:33:57.350Z"
+    },
+    {
+      "id": 2,
+      "task_id": "T01",
+      "slice_id": "S01",
+      "milestone_id": "M001",
+      "command": "npx vitest run src/core/api.test.ts --reporter=verbose",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 1300,
+      "created_at": "2026-03-26T02:33:57.350Z"
+    },
+    {
+      "id": 3,
+      "task_id": "T02",
+      "slice_id": "S01",
+      "milestone_id": "M001",
+      "command": "npx vitest run src/core/api.test.ts --reporter=verbose",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 1490,
+      "created_at": "2026-03-26T02:36:58.565Z"
+    },
+    {
+      "id": 4,
+      "task_id": "T03",
+      "slice_id": "S01",
+      "milestone_id": "M001",
+      "command": "pnpm typecheck",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 3600,
+      "created_at": "2026-03-26T02:45:31.643Z"
+    },
+    {
+      "id": 5,
+      "task_id": "T03",
+      "slice_id": "S01",
+      "milestone_id": "M001",
+      "command": "pnpm test",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 1380,
+      "created_at": "2026-03-26T02:45:31.643Z"
+    },
+    {
+      "id": 6,
+      "task_id": "T01",
+      "slice_id": "S02",
+      "milestone_id": "M001",
+      "command": "npx tsc --noEmit",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 2300,
+      "created_at": "2026-03-26T02:57:00.398Z"
+    },
+    {
+      "id": 7,
+      "task_id": "T01",
+      "slice_id": "S02",
+      "milestone_id": "M001",
+      "command": "npx vitest run",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 4300,
+      "created_at": "2026-03-26T02:57:00.398Z"
+    },
+    {
+      "id": 8,
+      "task_id": "T02",
+      "slice_id": "S02",
+      "milestone_id": "M001",
+      "command": "npx tsc --noEmit",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 6800,
+      "created_at": "2026-03-26T03:00:28.225Z"
+    },
+    {
+      "id": 9,
+      "task_id": "T02",
+      "slice_id": "S02",
+      "milestone_id": "M001",
+      "command": "npx vitest run",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 3400,
+      "created_at": "2026-03-26T03:00:28.225Z"
+    },
+    {
+      "id": 10,
+      "task_id": "T03",
+      "slice_id": "S02",
+      "milestone_id": "M001",
+      "command": "npx tsc --noEmit",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 3600,
+      "created_at": "2026-03-26T03:03:12.044Z"
+    },
+    {
+      "id": 11,
+      "task_id": "T03",
+      "slice_id": "S02",
+      "milestone_id": "M001",
+      "command": "npx vitest run",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 3000,
+      "created_at": "2026-03-26T03:03:12.044Z"
+    },
+    {
+      "id": 12,
+      "task_id": "T01",
+      "slice_id": "S03",
+      "milestone_id": "M001",
+      "command": "pnpm typecheck",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 3500,
+      "created_at": "2026-03-26T03:13:41.897Z"
+    },
+    {
+      "id": 13,
+      "task_id": "T01",
+      "slice_id": "S03",
+      "milestone_id": "M001",
+      "command": "pnpm test",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 3500,
+      "created_at": "2026-03-26T03:13:41.897Z"
+    },
+    {
+      "id": 14,
+      "task_id": "T02",
+      "slice_id": "S03",
+      "milestone_id": "M001",
+      "command": "pnpm typecheck",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 3400,
+      "created_at": "2026-03-26T03:15:21.818Z"
+    },
+    {
+      "id": 15,
+      "task_id": "T02",
+      "slice_id": "S03",
+      "milestone_id": "M001",
+      "command": "pnpm test",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 3400,
+      "created_at": "2026-03-26T03:15:21.819Z"
+    },
+    {
+      "id": 16,
+      "task_id": "T03",
+      "slice_id": "S03",
+      "milestone_id": "M001",
+      "command": "pnpm typecheck",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 4100,
+      "created_at": "2026-03-26T03:17:24.990Z"
+    },
+    {
+      "id": 17,
+      "task_id": "T03",
+      "slice_id": "S03",
+      "milestone_id": "M001",
+      "command": "pnpm test",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 5400,
+      "created_at": "2026-03-26T03:17:24.990Z"
+    },
+    {
+      "id": 18,
+      "task_id": "T01",
+      "slice_id": "S04",
+      "milestone_id": "M001",
+      "command": "pnpm test",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 3270,
+      "created_at": "2026-03-26T03:29:52.396Z"
+    },
+    {
+      "id": 19,
+      "task_id": "T01",
+      "slice_id": "S04",
+      "milestone_id": "M001",
+      "command": "pnpm typecheck",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 3800,
+      "created_at": "2026-03-26T03:29:52.396Z"
+    },
+    {
+      "id": 20,
+      "task_id": "T02",
+      "slice_id": "S04",
+      "milestone_id": "M001",
+      "command": "pnpm test",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 3480,
+      "created_at": "2026-03-26T03:33:25.407Z"
+    },
+    {
+      "id": 21,
+      "task_id": "T02",
+      "slice_id": "S04",
+      "milestone_id": "M001",
+      "command": "pnpm typecheck",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 4200,
+      "created_at": "2026-03-26T03:33:25.407Z"
+    },
+    {
+      "id": 22,
+      "task_id": "T03",
+      "slice_id": "S04",
+      "milestone_id": "M001",
+      "command": "pnpm test",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 7500,
+      "created_at": "2026-03-26T03:35:27.482Z"
+    },
+    {
+      "id": 23,
+      "task_id": "T03",
+      "slice_id": "S04",
+      "milestone_id": "M001",
+      "command": "pnpm typecheck",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 4300,
+      "created_at": "2026-03-26T03:35:27.482Z"
+    }
+  ]
+}
