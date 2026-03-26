@@ -18,6 +18,10 @@ export const OutlineItemRow = observer(function OutlineItemRow({ item }: Outline
 
   const [localValue, setLocalValue] = useState(item.content)
   const rowRef = useRef<HTMLDivElement>(null)
+  // Track whether item was empty when edit mode started — used to decide
+  // if Escape/Enter on empty should archive (new blank item from o/O)
+  // vs just save empty content (user cleared an existing item)
+  const wasEmptyOnEditStart = useRef(false)
 
   // Scroll cursor item into view when it becomes the cursor
   useEffect(() => {
@@ -33,6 +37,7 @@ export const OutlineItemRow = observer(function OutlineItemRow({ item }: Outline
       if (el) {
         // Sync to latest content on mount and focus
         setLocalValue(item.content)
+        wasEmptyOnEditStart.current = item.content.trim() === ''
         el.focus()
       }
     },
@@ -49,14 +54,24 @@ export const OutlineItemRow = observer(function OutlineItemRow({ item }: Outline
     if (e.key === 'Escape') {
       e.preventDefault()
       e.stopPropagation()
-      commitAndStop()
+      // If item was created empty (via o/O) and still empty, archive it
+      if (wasEmptyOnEditStart.current && localValue.trim() === '') {
+        stopEditing(state, undoManager)
+        archiveItem(state, undoManager, item.id)
+      } else {
+        commitAndStop()
+      }
     } else if (e.key === 'Enter') {
       e.preventDefault()
       e.stopPropagation()
-      // If empty, archive the blank item and return to navigate mode
+      // If empty, archive if it was a new blank item, otherwise just stop
       if (localValue.trim() === '') {
-        stopEditing(state, undoManager)
-        archiveItem(state, undoManager, item.id)
+        if (wasEmptyOnEditStart.current) {
+          stopEditing(state, undoManager)
+          archiveItem(state, undoManager, item.id)
+        } else {
+          commitAndStop()
+        }
         return
       }
       // 1. Save current content

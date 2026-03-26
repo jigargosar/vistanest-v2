@@ -118,12 +118,24 @@ describe('useKeyboardHandler — navigation mode', () => {
     expect(state.getItem(id1)!.isCompleted).toBe(false)
   })
 
-  it('h / l toggles collapse', () => {
+  it('h collapses, l expands (not toggle)', () => {
     const { id1 } = seedThree()
     cleanup = renderHandler()
     expect(state.getItem(id1)!.isCollapsed).toBe(false)
+
+    // h collapses
     fire('h')
     expect(state.getItem(id1)!.isCollapsed).toBe(true)
+
+    // h on already-collapsed is a no-op
+    fire('h')
+    expect(state.getItem(id1)!.isCollapsed).toBe(true)
+
+    // l expands
+    fire('l')
+    expect(state.getItem(id1)!.isCollapsed).toBe(false)
+
+    // l on already-expanded is a no-op
     fire('l')
     expect(state.getItem(id1)!.isCollapsed).toBe(false)
   })

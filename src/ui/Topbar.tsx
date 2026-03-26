@@ -26,9 +26,9 @@ export function Topbar() {
 
       {/* Nav links (disabled placeholders) */}
       <nav className="hidden sm:flex items-center gap-3 text-sm text-text-secondary/50 font-body select-none">
-        <span className="cursor-not-allowed">Due</span>
-        <span className="cursor-not-allowed">Tags</span>
-        <span className="cursor-not-allowed">Lists</span>
+        <span className="cursor-not-allowed" title="Coming soon">Due</span>
+        <span className="cursor-not-allowed" title="Coming soon">Tags</span>
+        <span className="cursor-not-allowed" title="Coming soon">Lists</span>
       </nav>
 
       <div className="flex-1" />

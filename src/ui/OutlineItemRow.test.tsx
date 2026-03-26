@@ -174,6 +174,59 @@ describe('OutlineItemRow — edit mode', () => {
     expect(visibleItems.length).toBe(0)
   })
 
+  it('Escape on empty new item archives it', () => {
+    const id = insertBelow(state, um)
+    // Item created empty — simulates o/O flow
+    startEditing(state, um, id)
+    um.clearUndo()
+
+    renderRow(id)
+    const input = screen.getByTestId('inline-edit-input') as HTMLInputElement
+
+    fireEvent.keyDown(input, { key: 'Escape' })
+
+    expect(state.editingItemId).toBeNull()
+    expect(state.getItem(id)!.isArchived).toBe(true)
+  })
+
+  it('Escape on existing item with cleared content saves empty — does NOT archive', () => {
+    const id = insertBelow(state, um)
+    setContent(state, um, id, 'has content')
+    startEditing(state, um, id)
+    um.clearUndo()
+
+    renderRow(id)
+    const input = screen.getByTestId('inline-edit-input') as HTMLInputElement
+
+    // User clears the content
+    fireEvent.change(input, { target: { value: '' } })
+    fireEvent.keyDown(input, { key: 'Escape' })
+
+    // Should save empty content but NOT archive
+    expect(state.editingItemId).toBeNull()
+    expect(state.getItem(id)!.content).toBe('')
+    expect(state.getItem(id)!.isArchived).toBe(false)
+  })
+
+  it('Enter on existing item with cleared content saves empty — does NOT archive', () => {
+    const id = insertBelow(state, um)
+    setContent(state, um, id, 'has content')
+    startEditing(state, um, id)
+    um.clearUndo()
+
+    renderRow(id)
+    const input = screen.getByTestId('inline-edit-input') as HTMLInputElement
+
+    // User clears the content
+    fireEvent.change(input, { target: { value: '' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    // Should save empty content but NOT archive
+    expect(state.editingItemId).toBeNull()
+    expect(state.getItem(id)!.content).toBe('')
+    expect(state.getItem(id)!.isArchived).toBe(false)
+  })
+
   it('input has themed styling with amber border and transparent background', () => {
     const id = insertBelow(state, um)
     startEditing(state, um, id)

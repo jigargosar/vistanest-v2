@@ -107,8 +107,19 @@ export function useKeyboardHandler(): void {
           break
 
         case 'h':
+          // h = collapse (vim-like: left = close)
+          if (cursorItemId) {
+            const hItem = state.getItem(cursorItemId)
+            if (hItem && !hItem.isCollapsed) toggleCollapse(state, undoManager, cursorItemId)
+          }
+          break
+
         case 'l':
-          if (cursorItemId) toggleCollapse(state, undoManager, cursorItemId)
+          // l = expand (vim-like: right = open)
+          if (cursorItemId) {
+            const lItem = state.getItem(cursorItemId)
+            if (lItem && lItem.isCollapsed) toggleCollapse(state, undoManager, cursorItemId)
+          }
           break
 
         case 'Backspace': {
